@@ -1,22 +1,69 @@
-# Sales Revenue Forecast
+# Stylo Internship
 
-Revenue forecasting notebook for a Microsoft Fabric Gold lakehouse. It reads the current `Gold.dbo.factsales_gold` Delta table, evaluates multiple forecasting models, selects a champion model, and writes daily, weekly, monthly, backtest, and forecast-history tables.
+Portfolio repository for internship work at Stylo. It currently holds **two** independent projects; more will be added as the internship progresses.
 
-## Run locally in VS Code
+Each project lives in its own folder with its own notebooks, data (where applicable), and run notes. There is no single shared app stack for the whole repo.
 
-```powershell
+## Projects
+
+| Project | Path | One-liner |
+|---|---|---|
+| **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
+| **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
+
+### `sales_predictor`
+
+Forecasts daily / weekly / monthly sales revenue against a Fabric Gold lakehouse.
+
+- **`Revenue_Forecast_Notebook.ipynb`** — main notebook: reads live `factsales_gold`, benchmarks candidate models (and blends), picks a champion, writes forecast / backtest / history tables, logs to MLflow. Runs on Fabric Spark or locally against OneLake.
+- **`revenue_forecast.ipynb`** — earlier notebook: load Gold fact sales, preprocess, linear regression and Prophet-style forecasting / visualization.
+- **`README_VSCode.md`** — how to run the Fabric notebook from VS Code (Fabric runtime vs local Python kernel).
+- **`requirements-local.txt`** — Python deps for local runs of `Revenue_Forecast_Notebook.ipynb`.
+- **`Revenue_Forecasting_Manual.pdf`** — forecasting manual for models and outputs.
+
+Fabric Git sync for the main notebook also lives at the repo root as [`Revenue_Forecast_Notebook.Notebook/`](Revenue_Forecast_Notebook.Notebook/) (`notebook-content.py` + `.platform`).
+
+**Quick local setup** (details in the VS Code guide):
+
+```bash
+cd sales_predictor
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r files\requirements-local.txt
+source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+pip install -r requirements-local.txt
 az login
 ```
 
-Open `files/Revenue_Forecast_Notebook.ipynb` in VS Code, select the `.venv` kernel, and run the cells in order. See [the VS Code guide](files/README_VSCode.md) for Fabric-runtime and local-run details.
+Open `Revenue_Forecast_Notebook.ipynb`, select the `.venv` kernel, and run cells in order. Prefer the Fabric Data Engineering extension + Microsoft Fabric Runtime when you want production-identical Spark behaviour.
 
-## Data and credentials
+### `solar_predictor`
 
-The notebook accesses OneLake using your Entra ID credentials. Do not commit credentials, local MLflow runs, Fabric caches, or exported lakehouse data. The included `.gitignore` excludes these machine-specific files.
+Offline notebook over bundled CSV data (no Fabric dependency in this folder).
 
-## Documentation
+- **`solar_forecast.ipynb`** — load `Plant_1_Generation_Data.csv` and `Plant_1_Weather_Sensor_Data.csv`, inspect and clean, merge on `DATE_TIME`, engineer features (including inverter dummies and time features), scale/split, fit **linear regression** to predict `AC_POWER`, and plot actual vs predicted.
+- **`data/`** — the two Plant 1 CSV inputs used by the notebook.
 
-The accompanying [forecasting manual](files/Revenue_Forecasting_Manual.pdf) describes the model and outputs.
+**Quick local setup:**
+
+```bash
+cd solar_predictor
+python -m venv .venv
+source .venv/bin/activate
+pip install pandas numpy scikit-learn matplotlib jupyter
+jupyter notebook solar_forecast.ipynb
+```
+
+(Paths in the notebook expect you to run it with `solar_predictor/` as the working directory so `data/` resolves.)
+
+## Repository layout
+
+```
+README.md
+.gitignore
+sales_predictor/                 # Fabric sales revenue forecasting
+solar_predictor/                 # Solar AC power prediction (CSV + notebook)
+Revenue_Forecast_Notebook.Notebook/   # Fabric-synced source for the sales notebook
+```
+
+## Credentials and local artifacts
+
+Do not commit secrets, Azure / Fabric tokens, local virtualenvs, MLflow runs, or exported lakehouse dumps. See [`.gitignore`](.gitignore).
