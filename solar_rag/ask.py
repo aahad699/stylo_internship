@@ -64,6 +64,19 @@ def index_ready() -> bool:
     return (Path(cfg.VECTORSTORE_DIR) / "index.faiss").exists()
 
 
+def _load_retriever():
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores import FAISS
+
+    embeddings = HuggingFaceEmbeddings(model_name=cfg.EMBEDDING_MODEL)
+    vectorstore = FAISS.load_local(
+        str(cfg.VECTORSTORE_DIR),
+        embeddings,
+        allow_dangerous_deserialization=True,
+    )
+    return vectorstore.as_retriever(search_kwargs={"k": cfg.TOP_K})
+
+
 def build_pipeline():
     """Create the retrieval + LLM chain once and reuse it."""
     if not index_ready():
@@ -72,30 +85,24 @@ def build_pipeline():
         )
 
     api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "GOOGLE_API_KEY is not set. Add it to solar_rag/.env (see .env.example)."
-        )
+    retriever = _load_retriever()
 
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_community.vectorstores import FAISS
+    if not api_key:
+        # Retrieval-only mode: useful until a Gemini key is configured
+        return {"mode": "retrieval", "retriever": retriever}
+
     from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_classic.chains import create_retrieval_chain
     from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 
-    embeddings = HuggingFaceEmbeddings(model_name=cfg.EMBEDDING_MODEL)
-    vectorstore = FAISS.load_local(
-        str(cfg.VECTORSTORE_DIR),
-        embeddings,
-        allow_dangerous_deserialization=True,
-    )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": cfg.TOP_K})
-
     llm = ChatGoogleGenerativeAI(model=cfg.LLM_MODEL, google_api_key=api_key)
     prompt = ChatPromptTemplate.from_template(_PROMPT)
     document_chain = create_stuff_documents_chain(llm, prompt)
-    return create_retrieval_chain(retriever, document_chain)
+    return {
+        "mode": "rag",
+        "chain": create_retrieval_chain(retriever, document_chain),
+    }
 
 
 def get_pipeline():
@@ -110,11 +117,27 @@ def ask(question: str) -> dict:
     if not question:
         raise ValueError("Question must not be empty.")
 
-    chain = get_pipeline()
-    response = chain.invoke({"input": question})
+    pipeline = get_pipeline()
+
+    if pipeline["mode"] == "retrieval":
+        docs = pipeline["retriever"].invoke(question)
+        if not docs:
+            answer = "I couldn't find that information in the uploaded documents."
+        else:
+            snippets = []
+            for i, doc in enumerate(docs, 1):
+                snippets.append(f"**Passage {i}**\n\n{doc.page_content.strip()}")
+            answer = (
+                "_Retrieval-only mode (set `GOOGLE_API_KEY` for Gemini answers)._ "
+                "Top matching passages:\n\n" + "\n\n---\n\n".join(snippets)
+            )
+        return {"answer": answer, "sources": _format_sources(docs), "mode": "retrieval"}
+
+    response = pipeline["chain"].invoke({"input": question})
     return {
         "answer": response["answer"],
         "sources": _format_sources(response.get("context") or []),
+        "mode": "rag",
     }
 
 

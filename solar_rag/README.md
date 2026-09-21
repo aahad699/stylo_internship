@@ -71,6 +71,10 @@ CLI ask without the UI:
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 
+Without `GOOGLE_API_KEY`, ask/app still run in **retrieval-only** mode (top passages + sources). Set the key for Gemini-written answers.
+
+Demo URL (auto-asks the Sandia question once): `http://localhost:8501/?demo=sandia`
+
 ## Documents
 
 Seed PDFs under `data/` (see `data/SOURCES.md`) — Sandia inverter model + arXiv PV / irradiance / smart-inverter papers. Drop any other PDFs into `data/` and re-run ingest.
