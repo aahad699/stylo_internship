@@ -1,6 +1,6 @@
 # Stylo Internship
 
-Portfolio repository for internship work at Stylo. It currently holds **two** independent projects; more will be added as the internship progresses.
+Portfolio repository for internship work at Stylo. It currently holds **three** independent projects; more will be added as the internship progresses.
 
 Each project lives in its own folder with its own notebooks, data (where applicable), and run notes. There is no single shared app stack for the whole repo.
 
@@ -10,6 +10,7 @@ Each project lives in its own folder with its own notebooks, data (where applica
 |---|---|---|
 | **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
 | **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
+| **Solar RAG** | [`solar_rag/`](solar_rag/) | General Streamlit RAG (LangChain + FAISS + Gemini) with Microsoft Fabric OneLake as durable storage for docs, index files, and chunk embeddings. |
 
 ### `sales_predictor`
 
@@ -54,6 +55,19 @@ jupyter notebook solar_forecast.ipynb
 
 (Paths in the notebook expect you to run it with `solar_predictor/` as the working directory so `data/` resolves.)
 
+### `solar_rag`
+
+General RAG chat over PDFs. Local FAISS + HuggingFace embeddings + Gemini; Fabric lakehouse **SolarRAG** stores docs, the FAISS files, and a Delta chunk table. See [`solar_rag/README.md`](solar_rag/README.md).
+
+```bash
+cd solar_rag
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # set GOOGLE_API_KEY
+python ingest.py --skip-fabric
+streamlit run app.py
+```
+
 ## Repository layout
 
 ```
@@ -61,6 +75,7 @@ README.md
 .gitignore
 sales_predictor/                 # Fabric sales revenue forecasting
 solar_predictor/                 # Solar AC power prediction (CSV + notebook)
+solar_rag/                       # Streamlit RAG + Fabric OneLake storage
 Revenue_Forecast_Notebook.Notebook/   # Fabric-synced source for the sales notebook
 ```
 
