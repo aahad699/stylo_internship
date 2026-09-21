@@ -28,6 +28,9 @@ mlruns/
 secrets.*
 .vscode/
 
+# RAG local vector indexes
+**/vectorstore/
+
 # Microsoft Fabric / VS Code generated workspace files
 .stubs/
 .vfscache/
