@@ -32,13 +32,14 @@ Query (streamlit run app.py  |  python ask.py "…")
 | FAISS index | `Files/solar_rag/vectorstore/` |
 | Chunks + embeddings | Delta table `dbo.solar_rag_chunks` |
 
-**Create a new lakehouse** (do this once in your Fabric workspace):
+**Fabric targets** (already set in `config.py`):
 
-1. Open the Fabric portal → your workspace (same one the VS Code Fabric extension is signed into).
-2. **New** → **Lakehouse** → name it `SolarRAG`.
-3. Open the lakehouse → **Settings / About** → copy the **Lakehouse ID** (GUID).
-4. Paste it into `config.py` as `FABRIC_LAKEHOUSE_ID`.
-5. Workspace id is already set to the same value used by `sales_predictor`.
+| | GUID |
+|--|--|
+| Workspace | `1aa55571-424f-4f72-ab00-18ec4ccb6cfb` |
+| Lakehouse | `8f082de5-0870-4e46-bc07-2ff0a4e6134e` |
+
+If the lakehouse display name in the portal is not `SolarRAG`, set `FABRIC_LAKEHOUSE_NAME` in `config.py` to that exact name (Spark mode only).
 
 **Two ways to sync / read OneLake** (same pattern as `sales_predictor`):
 
@@ -47,7 +48,7 @@ Query (streamlit run app.py  |  python ask.py "…")
 | Fabric Runtime | VS Code **Microsoft Fabric Runtime** kernel / portal | `spark` / `mssparkutils` talk to the lakehouse by name |
 | Local Python | laptop / this repo `.venv` | `az login` (or service principal) + `deltalake` / Azure Data Lake SDK over `abfss://…@onelake.dfs.fabric.microsoft.com` |
 
-Until the lakehouse id is pasted, `ingest.py` still builds a fully working **local** index; Fabric sync is skipped with a clear message.
+Use `--skip-fabric` to build a local-only index without touching OneLake.
 
 ## Quick start
 
@@ -61,7 +62,6 @@ cp .env.example .env               # put GOOGLE_API_KEY in .env
 python ingest.py --skip-fabric     # build local FAISS from data/*.pdf
 streamlit run app.py               # chat UI
 
-# after SolarRAG lakehouse id is in config.py:
 python ingest.py                   # local rebuild + push to OneLake
 ```
 

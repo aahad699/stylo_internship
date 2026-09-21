@@ -1,7 +1,4 @@
-"""Paths and knobs used by ingest / ask / Fabric sync.
-
-Edit FABRIC_* after you create the SolarRAG lakehouse in your workspace.
-"""
+"""Paths and knobs used by ingest / ask / Fabric sync."""
 
 from pathlib import Path
 
@@ -19,11 +16,12 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 TOP_K = 4
 
-# --- Microsoft Fabric / OneLake (new SolarRAG lakehouse) ---
-# Same workspace as sales_predictor. Create a lakehouse named SolarRAG in Fabric,
-# then paste its lakehouse GUID below (Lakehouse settings → About).
-FABRIC_WORKSPACE_ID = "1dca1c65-3ce2-483e-a7fb-baf7fca28e9f"
-FABRIC_LAKEHOUSE_ID = "REPLACE_WITH_SOLAR_RAG_LAKEHOUSE_ID"
+# --- Microsoft Fabric / OneLake (dedicated solar_rag workspace) ---
+# From: https://app.fabric.microsoft.com/groups/<workspace>/lakehouses/<lakehouse>
+# If you rename the lakehouse in Fabric, update FABRIC_LAKEHOUSE_NAME to match
+# (needed for Spark saveAsTable; local delta-rs sync uses the GUID only).
+FABRIC_WORKSPACE_ID = "1aa55571-424f-4f72-ab00-18ec4ccb6cfb"
+FABRIC_LAKEHOUSE_ID = "8f082de5-0870-4e46-bc07-2ff0a4e6134e"
 FABRIC_LAKEHOUSE_NAME = "SolarRAG"
 FABRIC_SCHEMA = "dbo"
 FABRIC_CHUNKS_TABLE = "solar_rag_chunks"
