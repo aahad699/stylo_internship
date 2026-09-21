@@ -1,99 +1,69 @@
-# Sales Revenue Forecast
+# Stylo Internship
 
-Microsoft Fabric notebook that forecasts sales revenue from the Gold lakehouse. It reads the live `Gold.dbo.factsales_gold` Delta table, benchmarks candidate forecasting models, selects a champion by weekly sMAPE, and writes daily, weekly, monthly, backtest, and forecast-history tables back to OneLake. Runs, metrics, and models are logged to the MLflow experiment `sales_revenue_forecast`.
+Portfolio repository for internship work at Stylo. It currently holds **two** independent projects; more will be added as the internship progresses.
 
-This repository is the internship / Stylo project deliverable for that forecasting pipeline (`stylo_internship` on GitHub).
+Each project lives in its own folder with its own notebooks, data (where applicable), and run notes. There is no single shared app stack for the whole repo.
 
-## What it does
+## Projects
 
-1. Builds a daily revenue series from fact sales (`Quantity × UnitPrice + Tax` when `INCLUDE_TAX` is enabled).
-2. Benchmarks up to ~25 candidates (single models plus blends; XGBoost / CatBoost candidates are skipped if those libraries are missing) with rolling-origin backtests.
-3. Scores weekly and monthly totals (MAE, RMSE, MAPE, sMAPE, WAPE, accuracy, bias, R², and direction-of-change precision / recall / F1).
-4. Picks the champion (lowest average weekly sMAPE), retrains on full history, and forecasts the rest of the current month plus `HORIZON_MONTHS` full months (default 3).
-5. Writes result tables to the Gold lakehouse and logs to MLflow (Fabric workspace experiment when available; otherwise local `./mlruns`).
+| Project | Path | One-liner |
+|---|---|---|
+| **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
+| **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
 
-### Output tables
+### `sales_predictor`
 
-| Table | Purpose |
-|---|---|
-| `revenue_forecast_gold` | Daily forecast from the latest run |
-| `revenue_weekly_gold` | Actual + forecast revenue per ISO week |
-| `revenue_monthly_gold` | Actual + forecast revenue per month |
-| `forecast_backtest_gold` | Benchmark metrics per model / fold / grain |
-| `revenue_forecast_history_gold` | Append-only monthly forecast history across runs |
+Forecasts daily / weekly / monthly sales revenue against a Fabric Gold lakehouse.
 
-### Candidate models (when libraries are available)
+- **`Revenue_Forecast_Notebook.ipynb`** — main notebook: reads live `factsales_gold`, benchmarks candidate models (and blends), picks a champion, writes forecast / backtest / history tables, logs to MLflow. Runs on Fabric Spark or locally against OneLake.
+- **`revenue_forecast.ipynb`** — earlier notebook: load Gold fact sales, preprocess, linear regression and Prophet-style forecasting / visualization.
+- **`README_VSCode.md`** — how to run the Fabric notebook from VS Code (Fabric runtime vs local Python kernel).
+- **`requirements-local.txt`** — Python deps for local runs of `Revenue_Forecast_Notebook.ipynb`.
+- **`Revenue_Forecasting_Manual.pdf`** — forecasting manual for models and outputs.
 
-Baselines and classical: naive last week, 4-week moving average, Holt damped trend, Prophet.
+Fabric Git sync for the main notebook also lives at the repo root as [`Revenue_Forecast_Notebook.Notebook/`](Revenue_Forecast_Notebook.Notebook/) (`notebook-content.py` + `.platform`).
 
-ML (lagged weekly log-growth features): linear regression, ridge, random forest, gradient boosting, LightGBM, XGBoost, CatBoost.
+**Quick local setup** (details in the VS Code guide):
 
-Blends: simple averages of selected component forecasts (for example Prophet + Holt, boosting ensembles, and a grand blend).
+```bash
+cd sales_predictor
+python -m venv .venv
+source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+pip install -r requirements-local.txt
+az login
+```
+
+Open `Revenue_Forecast_Notebook.ipynb`, select the `.venv` kernel, and run cells in order. Prefer the Fabric Data Engineering extension + Microsoft Fabric Runtime when you want production-identical Spark behaviour.
+
+### `solar_predictor`
+
+Offline notebook over bundled CSV data (no Fabric dependency in this folder).
+
+- **`solar_forecast.ipynb`** — load `Plant_1_Generation_Data.csv` and `Plant_1_Weather_Sensor_Data.csv`, inspect and clean, merge on `DATE_TIME`, engineer features (including inverter dummies and time features), scale/split, fit **linear regression** to predict `AC_POWER`, and plot actual vs predicted.
+- **`data/`** — the two Plant 1 CSV inputs used by the notebook.
+
+**Quick local setup:**
+
+```bash
+cd solar_predictor
+python -m venv .venv
+source .venv/bin/activate
+pip install pandas numpy scikit-learn matplotlib jupyter
+jupyter notebook solar_forecast.ipynb
+```
+
+(Paths in the notebook expect you to run it with `solar_predictor/` as the working directory so `data/` resolves.)
 
 ## Repository layout
 
 ```
 README.md
 .gitignore
-files/
-  Revenue_Forecast_Notebook.ipynb   # notebook for VS Code / local or Fabric runtime
-  README_VSCode.md                  # detailed run guide (Fabric vs local)
-  requirements-local.txt            # Python deps for local kernel mode
-  Revenue_Forecasting_Manual.pdf    # forecasting manual
-Revenue_Forecast_Notebook.Notebook/
-  notebook-content.py               # Fabric Git-synced notebook source
-  .platform                         # Fabric notebook metadata
+sales_predictor/                 # Fabric sales revenue forecasting
+solar_predictor/                 # Solar AC power prediction (CSV + notebook)
+Revenue_Forecast_Notebook.Notebook/   # Fabric-synced source for the sales notebook
 ```
 
-## Tech stack
+## Credentials and local artifacts
 
-- **Platform:** Microsoft Fabric (Spark / lakehouse) and OneLake (Delta)
-- **Languages / runtimes:** Python, PySpark (Fabric), Jupyter
-- **Modeling:** Prophet, statsmodels (Holt), scikit-learn, LightGBM; optional XGBoost and CatBoost
-- **Data access:** Spark tables in Fabric; `deltalake` + `azure-identity` locally
-- **Tracking:** MLflow (`sales_revenue_forecast` experiment; `synapseml-mlflow` for Fabric from a laptop)
-
-## Prerequisites
-
-- Access to the Fabric workspace and Gold lakehouse (Member/Contributor for writes)
-- For local runs: Python 3, Azure CLI (`az login`) or another Entra ID credential that `DefaultAzureCredential` can use
-- Network reachability to `onelake.dfs.fabric.microsoft.com`
-
-Workspace and lakehouse IDs used by local mode live in the notebook parameters cell (`WORKSPACE_ID`, `GOLD_LAKEHOUSE_ID`). Update those if you point at a different lakehouse.
-
-## Run on Fabric Spark (recommended for production-identical behaviour)
-
-1. Open the notebook in the Fabric portal, or use VS Code with the **Fabric Data Engineering** extension and the **Microsoft Fabric Runtime** kernel.
-2. Run all cells. `spark` is present → `RUN_MODE = "fabric-spark"`.
-3. The first cell installs Prophet / XGBoost / CatBoost in the remote session when missing.
-
-Tables are read and written with Spark; MLflow logs to the workspace experiment.
-
-## Run locally in VS Code
-
-```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-pip install -r files/requirements-local.txt
-az login
-```
-
-Open `files/Revenue_Forecast_Notebook.ipynb`, select the `.venv` kernel, and run the cells in order. Without `spark`, the notebook sets `RUN_MODE = "local"`, reads/writes Gold Delta tables over OneLake, and logs MLflow to Fabric when `synapseml-mlflow` works (otherwise `./mlruns`).
-
-For full comparison of Fabric vs local mode, authentication notes, and unattended service-principal setup, see [files/README_VSCode.md](files/README_VSCode.md).
-
-## Configuration
-
-Key parameters are in the notebook config cell, including:
-
-- Input / output table names and `KEEP_FORECAST_HISTORY`
-- `HORIZON_MONTHS`, `BACKTEST_FOLDS`, `BACKTEST_HORIZON_MONTHS`, `INTERVAL_WIDTH`
-- `INCLUDE_TAX`, MLflow experiment / registered model names
-- `LOCAL_MLFLOW_TO_FABRIC` for laptop → Fabric tracking
-
-Do not commit credentials, local MLflow runs, Fabric caches, or exported lakehouse data. `.gitignore` already excludes common machine-specific paths (`.venv/`, `mlruns/`, `.env`, Fabric VS Code caches, and similar).
-
-## Documentation
-
-- [VS Code / local run guide](files/README_VSCode.md)
-- [Forecasting manual (PDF)](files/Revenue_Forecasting_Manual.pdf)
+Do not commit secrets, Azure / Fabric tokens, local virtualenvs, MLflow runs, or exported lakehouse dumps. See [`.gitignore`](.gitignore).
