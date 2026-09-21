@@ -130,7 +130,7 @@ def main() -> None:
     if not lakehouse_configured():
         print(
             "Fabric lakehouse id not set yet (config.FABRIC_LAKEHOUSE_ID).\n"
-            "Create lakehouse 'SolarRAG' in Fabric, paste the id into config.py, then re-run\n"
+            "Paste the SolarRAG lakehouse GUID into config.py, then re-run\n"
             "  python ingest.py\n"
             "Local index is ready either way."
         )

@@ -111,6 +111,6 @@ with st.sidebar:
     import config as cfg
 
     configured = bool(cfg.FABRIC_LAKEHOUSE_ID) and "REPLACE" not in cfg.FABRIC_LAKEHOUSE_ID
-    st.write("Lakehouse id set:", "✅" if configured else "❌ (create SolarRAG, paste id)")
+    st.write("Lakehouse id set:", "✅" if configured else "❌ (set FABRIC_LAKEHOUSE_ID)")
     st.caption(f"Workspace: `{cfg.FABRIC_WORKSPACE_ID}`")
     st.caption(f"Lakehouse name: `{cfg.FABRIC_LAKEHOUSE_NAME}`")
