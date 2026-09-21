@@ -26,12 +26,13 @@ st.set_page_config(page_title="Solar RAG", page_icon="☀️", layout="wide")
 st.title("Solar RAG")
 st.caption("Ask questions over your documents. Backed by FAISS locally; Fabric OneLake for durable storage.")
 
-if not os.getenv("GOOGLE_API_KEY"):
-    st.error(
-        "**GOOGLE_API_KEY is not set.** Add it to `solar_rag/.env` "
-        '(see `.env.example`) or to Streamlit Secrets as `GOOGLE_API_KEY = "…"`.'
+has_gemini = bool(os.getenv("GOOGLE_API_KEY"))
+if not has_gemini:
+    st.warning(
+        "**GOOGLE_API_KEY is not set** — running in retrieval-only mode "
+        "(top passages, no Gemini summary). Add the key to `solar_rag/.env` "
+        "or Streamlit Secrets for full RAG answers."
     )
-    st.stop()
 
 
 @st.cache_resource(show_spinner=False)
@@ -41,8 +42,6 @@ def load_ask_module():
     if not index_ready():
         with st.spinner("Building the knowledge index (first run)…"):
             from ingest import main as build_index
-
-            # First-run on a fresh clone: build local index only
             import sys
 
             argv = sys.argv
@@ -59,6 +58,26 @@ ask_fn = load_ask_module()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+
+def _answer(question: str) -> dict:
+    with st.spinner("Thinking…"):
+        return ask_fn(question)
+
+
+# Optional one-shot demo: open http://localhost:8501/?demo=sandia
+if st.query_params.get("demo") == "sandia" and not st.session_state.get("_demo_ran"):
+    demo_q = "What is the Sandia inverter performance model used for?"
+    result = _answer(demo_q)
+    st.session_state.messages = [
+        {"role": "user", "content": demo_q},
+        {
+            "role": "assistant",
+            "content": result["answer"],
+            "sources": result["sources"],
+        },
+    ]
+    st.session_state._demo_ran = True
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -72,19 +91,8 @@ for message in st.session_state.messages:
 question = st.chat_input("Ask anything about the indexed documents…")
 
 if question:
+    result = _answer(question)
     st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
-            result = ask_fn(question)
-        st.markdown(result["answer"])
-        if result["sources"]:
-            st.markdown("**Sources**")
-            for source in result["sources"]:
-                st.caption(f"{source['file']} (page {source['page']})")
-
     st.session_state.messages.append(
         {
             "role": "assistant",
@@ -92,6 +100,7 @@ if question:
             "sources": result["sources"],
         }
     )
+    st.rerun()
 
 with st.sidebar:
     st.subheader("Index")
