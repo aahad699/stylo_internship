@@ -50,6 +50,10 @@ If the lakehouse display name in the portal is not `SolarRAG`, set `FABRIC_LAKEH
 
 Use `--skip-fabric` to build a local-only index without touching OneLake.
 
+Local sync uses the signed-in Azure CLI identity by default. To use a service
+principal instead, set `FABRIC_AUTH_MODE=service_principal` in `.env`; that
+principal must have Contributor access to the Fabric workspace.
+
 ## Quick start
 
 ```bash

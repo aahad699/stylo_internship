@@ -13,6 +13,7 @@ Works in two modes (same idea as sales_predictor):
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import config as cfg
@@ -69,10 +70,30 @@ def _active_spark():
 
 
 def local_storage_options() -> dict:
-    from azure.identity import DefaultAzureCredential
-
-    token = DefaultAzureCredential().get_token("https://storage.azure.com/.default").token
+    token = fabric_credential().get_token("https://storage.azure.com/.default").token
     return {"bearer_token": token, "use_fabric_endpoint": "true"}
+
+
+def fabric_credential():
+    """Select the identity used for local OneLake access."""
+    from azure.identity import AzureCliCredential, ClientSecretCredential
+
+    auth_mode = os.getenv("FABRIC_AUTH_MODE", "azure_cli").strip().lower()
+    if auth_mode == "service_principal":
+        required = ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET")
+        missing = [name for name in required if not os.getenv(name)]
+        if missing:
+            raise RuntimeError(
+                "FABRIC_AUTH_MODE=service_principal requires: " + ", ".join(missing)
+            )
+        return ClientSecretCredential(
+            tenant_id=os.environ["AZURE_TENANT_ID"],
+            client_id=os.environ["AZURE_CLIENT_ID"],
+            client_secret=os.environ["AZURE_CLIENT_SECRET"],
+        )
+    if auth_mode != "azure_cli":
+        raise ValueError("FABRIC_AUTH_MODE must be 'azure_cli' or 'service_principal'.")
+    return AzureCliCredential()
 
 
 def upload_directory_to_files(local_dir: Path, files_prefix: str) -> None:
@@ -101,11 +122,10 @@ def upload_directory_to_files(local_dir: Path, files_prefix: str) -> None:
         return
 
     # Local: Azure Data Lake FileSystemClient over the Fabric DFS endpoint
-    from azure.identity import DefaultAzureCredential
     from azure.storage.filedatalake import DataLakeServiceClient
 
     account_url = f"https://onelake.dfs.fabric.microsoft.com"
-    service = DataLakeServiceClient(account_url, credential=DefaultAzureCredential())
+    service = DataLakeServiceClient(account_url, credential=fabric_credential())
     fs = service.get_file_system_client(cfg.FABRIC_WORKSPACE_ID)
 
     for path in files:
