@@ -2,10 +2,11 @@
 # then write those same chunks to dbo.solar_rag_chunks.
 #
 #   python ingest.py
-#   python ingest.py --skip-fabric
 
+#-- project folders --
 from pathlib import Path
 
+#-- read .env --
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,16 +27,11 @@ TABLE_PATH = (
     f"{LAKEHOUSE_ID}/Tables/dbo/solar_rag_chunks"
 )
 
-import argparse
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--skip-fabric", action="store_true")
-skip_fabric = parser.parse_args().skip_fabric
-
 pdf_files = sorted(DATA_DIR.glob("*.pdf"))
 if not pdf_files:
     raise SystemExit(f"No PDFs found in {DATA_DIR}")
 
+#-- load every PDF in data/ --
 from langchain_community.document_loaders import PyPDFLoader
 
 print(f"Loading {len(pdf_files)} PDF(s) from {DATA_DIR}")
@@ -46,6 +42,7 @@ for pdf in pdf_files:
     print(f"  {pdf.name}: {len(pages)} page(s)")
 print(f"Loaded {len(documents)} page(s)")
 
+#-- split pages into overlapping chunks and drop the short scraps --
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 splitter = RecursiveCharacterTextSplitter(
@@ -66,11 +63,13 @@ if not chunks:
 print(f"Split into {len(chunks)} usable chunk(s)")
 
 try:
+    #-- allow the embedding model download on this laptop --
     import truststore
     truststore.inject_into_ssl()
 except ImportError:
     pass
 
+#-- embed each chunk once and save the FAISS index --
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -91,10 +90,7 @@ VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
 vectorstore.save_local(str(VECTORSTORE_DIR))
 print(f"Saved FAISS index -> {VECTORSTORE_DIR}")
 
-if skip_fabric:
-    print("Skipping Fabric sync.")
-    raise SystemExit(0)
-
+#-- pack the vectors and write dbo.solar_rag_chunks --
 import base64
 import os
 import struct

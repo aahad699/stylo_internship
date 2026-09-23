@@ -14,7 +14,7 @@ Ingest (python ingest.py)
 
   data/*.pdf  →  load  →  chunk  →  embed (BGE-base)  →  FAISS (vectorstore/)
                                               ↘
-                                    optional Fabric sync
+                                    Fabric sync
                                       • Tables/dbo/solar_rag_chunks
 
 Query (python ask.py "…")
@@ -37,8 +37,7 @@ Query (python ask.py "…")
 | Workspace | `1aa55571-424f-4f72-ab00-18ec4ccb6cfb` |
 | Lakehouse | `8f082de5-0870-4e46-bc07-2ff0a4e6134e` |
 
-Use `--skip-fabric` to build a local-only index without touching OneLake.
-`python ingest.py` writes `dbo.solar_rag_chunks` with `deltalake` over OneLake.
+`python ingest.py` writes the local FAISS index and `dbo.solar_rag_chunks`.
 Sign in with `az login` before that command. `ask.py` uses the same login to query the SQL endpoint.
 
 ## Quick start
@@ -50,10 +49,8 @@ source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp .env.example .env               # put GOOGLE_API_KEY in .env
 
-python ingest.py --skip-fabric     # build local FAISS from data/*.pdf
-
 az login
-python ingest.py                   # local rebuild + overwrite dbo.solar_rag_chunks
+python ingest.py                   # local FAISS index + dbo.solar_rag_chunks
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 

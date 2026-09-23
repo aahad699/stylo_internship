@@ -64,7 +64,8 @@ cd solar_rag
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # set GOOGLE_API_KEY
-python ingest.py --skip-fabric
+az login
+python ingest.py
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 

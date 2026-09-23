@@ -3,8 +3,10 @@
 #
 #   python ask.py "What is the Sandia inverter model?"
 
+#-- read the question from the command line --
 import sys
 
+#-- read .env --
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,6 +43,7 @@ question = " ".join(sys.argv[1:]).strip()
 if not question:
     raise SystemExit('Usage: python ask.py "your question"')
 
+#-- sign in and SELECT the chunk table from the SQL endpoint --
 import struct
 
 import pyodbc
@@ -67,11 +70,13 @@ if not rows:
     raise SystemExit("dbo.solar_rag_chunks returned no rows. Run python ingest.py")
 
 try:
+    #-- allow the embedding model download on this laptop --
     import truststore
     truststore.inject_into_ssl()
 except ImportError:
     pass
 
+#-- embed the question with the same model used at ingest --
 from langchain_huggingface import HuggingFaceEmbeddings
 
 embeddings = HuggingFaceEmbeddings(
@@ -81,6 +86,7 @@ embeddings = HuggingFaceEmbeddings(
 )
 query = embeddings.embed_query(question)
 
+#-- decode each stored vector and keep the 4 closest chunks --
 import base64
 
 scored = []
@@ -96,6 +102,7 @@ top = scored[:TOP_K]
 
 context = "\n\n".join(text.strip() for score, source, page, text in top)
 
+#-- answer from those chunks, or print them if there is no Gemini key --
 import os
 
 api_key = os.getenv("GOOGLE_API_KEY")
@@ -105,6 +112,7 @@ elif not api_key:
     print("No GOOGLE_API_KEY. Passages:\n")
     print(context)
 else:
+    #-- ask Gemini using only the chunks above --
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     llm = ChatGoogleGenerativeAI(model=LLM_MODEL, google_api_key=api_key)
