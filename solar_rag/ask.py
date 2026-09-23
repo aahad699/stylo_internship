@@ -1,27 +1,38 @@
-"""
-Ask a question against the local FAISS index (built by ingest.py).
+# Read dbo.solar_rag_chunks from the SolarRAG SQL endpoint, keep the 4
+# closest chunks, and ask Gemini to answer from those chunks only.
+#
+#   python ask.py "What is the Sandia inverter model?"
 
-Flow:
-  load embeddings → load FAISS → retrieve top-k → prompt Gemini → answer + sources
-
-Used by the Streamlit app and as a CLI:
-
-    python ask.py "What is the Sandia inverter model?"
-"""
-
-from __future__ import annotations
-
+import base64
 import os
+import struct
 import sys
-from pathlib import Path
 
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
+import pyodbc
+from azure.identity import AzureCliCredential
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
 
-import config as cfg
+EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+QUERY_PROMPT = "Represent this sentence for searching relevant passages: "
+LLM_MODEL = "gemini-2.5-flash"
+TOP_K = 4
 
-_PROMPT = """You are an AI assistant that answers questions ONLY using the provided context.
+SQL_SERVER = (
+    "wsw7jvfvolau5hwgzi4rno2o6u-ofk2kgspijze7kyaddwezs3m7m"
+    ".datawarehouse.fabric.microsoft.com"
+)
+
+PROMPT = """You are an AI assistant that answers questions ONLY using the provided context.
 
 Rules:
 1. Answer only from the provided context.
@@ -34,125 +45,71 @@ Context:
 {context}
 
 Question:
-{input}
+{question}
 
 Answer:
 """
 
-# Lazy-loaded so Streamlit can import this module before the index exists
-_pipeline = None
+question = " ".join(sys.argv[1:]).strip()
+if not question:
+    raise SystemExit('Usage: python ask.py "your question"')
 
+token = AzureCliCredential().get_token("https://database.windows.net/.default").token
+encoded = token.encode("utf-16-le")
+token_struct = struct.pack(f"<I{len(encoded)}s", len(encoded), encoded)
+conn = pyodbc.connect(
+    "DRIVER={ODBC Driver 18 for SQL Server};"
+    f"SERVER={SQL_SERVER};"
+    "DATABASE=SolarRAG;"
+    "Encrypt=yes;"
+    "TrustServerCertificate=no;",
+    attrs_before={1256: token_struct},
+)
+cursor = conn.cursor()
+cursor.execute(
+    "SELECT source, page, text, embedding FROM dbo.solar_rag_chunks"
+)
+rows = cursor.fetchall()
+conn.close()
+if not rows:
+    raise SystemExit("dbo.solar_rag_chunks returned no rows. Run python ingest.py")
 
-def _format_sources(documents) -> list[dict]:
-    seen = set()
-    sources = []
-    for document in documents:
-        metadata = getattr(document, "metadata", {}) or {}
-        file = os.path.basename(str(metadata.get("source", "Unknown")))
-        page = metadata.get("page", "Unknown")
-        if isinstance(page, int):
-            page = page + 1  # pypdf is 0-indexed
-        key = (file, page)
-        if key in seen:
-            continue
-        seen.add(key)
-        sources.append({"file": file, "page": page})
-    return sources
+embeddings = HuggingFaceEmbeddings(
+    model_name=EMBEDDING_MODEL,
+    encode_kwargs={"normalize_embeddings": True},
+    query_encode_kwargs={"normalize_embeddings": True, "prompt": QUERY_PROMPT},
+)
+query = embeddings.embed_query(question)
 
+scored = []
+for source, page, text, embedding in rows:
+    raw = base64.b64decode(embedding)
+    vector = struct.unpack(f"<{len(raw) // 4}f", raw[: (len(raw) // 4) * 4])
+    if len(vector) != len(query):
+        raise SystemExit("Embedding column looks truncated. Run python ingest.py again.")
+    score = sum(a * b for a, b in zip(query, vector))
+    scored.append((score, source, page, text))
+scored.sort(key=lambda item: item[0], reverse=True)
+top = scored[:TOP_K]
 
-def index_ready() -> bool:
-    return (Path(cfg.VECTORSTORE_DIR) / "index.faiss").exists()
+context = "\n\n".join(text.strip() for score, source, page, text in top)
+api_key = os.getenv("GOOGLE_API_KEY")
+if not context:
+    print("I couldn't find that information in the uploaded documents.")
+elif not api_key:
+    print("No GOOGLE_API_KEY. Passages:\n")
+    print(context)
+else:
+    llm = ChatGoogleGenerativeAI(model=LLM_MODEL, google_api_key=api_key)
+    print(llm.invoke(PROMPT.format(context=context, question=question)).content)
 
-
-def _load_retriever():
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_community.vectorstores import FAISS
-
-    embeddings = HuggingFaceEmbeddings(model_name=cfg.EMBEDDING_MODEL)
-    vectorstore = FAISS.load_local(
-        str(cfg.VECTORSTORE_DIR),
-        embeddings,
-        allow_dangerous_deserialization=True,
-    )
-    return vectorstore.as_retriever(search_kwargs={"k": cfg.TOP_K})
-
-
-def build_pipeline():
-    """Create the retrieval + LLM chain once and reuse it."""
-    if not index_ready():
-        raise FileNotFoundError(
-            f"No FAISS index at {cfg.VECTORSTORE_DIR}. Run: python ingest.py --skip-fabric"
-        )
-
-    api_key = os.getenv("GOOGLE_API_KEY")
-    retriever = _load_retriever()
-
-    if not api_key:
-        # Retrieval-only mode: useful until a Gemini key is configured
-        return {"mode": "retrieval", "retriever": retriever}
-
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_classic.chains import create_retrieval_chain
-    from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-
-    llm = ChatGoogleGenerativeAI(model=cfg.LLM_MODEL, google_api_key=api_key)
-    prompt = ChatPromptTemplate.from_template(_PROMPT)
-    document_chain = create_stuff_documents_chain(llm, prompt)
-    return {
-        "mode": "rag",
-        "chain": create_retrieval_chain(retriever, document_chain),
-    }
-
-
-def get_pipeline():
-    global _pipeline
-    if _pipeline is None:
-        _pipeline = build_pipeline()
-    return _pipeline
-
-
-def ask(question: str) -> dict:
-    question = (question or "").strip()
-    if not question:
-        raise ValueError("Question must not be empty.")
-
-    pipeline = get_pipeline()
-
-    if pipeline["mode"] == "retrieval":
-        docs = pipeline["retriever"].invoke(question)
-        if not docs:
-            answer = "I couldn't find that information in the uploaded documents."
-        else:
-            snippets = []
-            for i, doc in enumerate(docs, 1):
-                snippets.append(f"**Passage {i}**\n\n{doc.page_content.strip()}")
-            answer = (
-                "_Retrieval-only mode (set `GOOGLE_API_KEY` for Gemini answers)._ "
-                "Top matching passages:\n\n" + "\n\n---\n\n".join(snippets)
-            )
-        return {"answer": answer, "sources": _format_sources(docs), "mode": "retrieval"}
-
-    response = pipeline["chain"].invoke({"input": question})
-    return {
-        "answer": response["answer"],
-        "sources": _format_sources(response.get("context") or []),
-        "mode": "rag",
-    }
-
-
-def main() -> None:
-    question = " ".join(sys.argv[1:]).strip()
-    if not question:
-        raise SystemExit('Usage: python ask.py "your question"')
-
-    result = ask(question)
-    print(result["answer"])
-    if result["sources"]:
-        print("\nSources:")
-        for source in result["sources"]:
-            print(f"  - {source['file']} (page {source['page']})")
-
-
-if __name__ == "__main__":
-    main()
+print("\nSources:")
+seen = set()
+for score, source, page, text in top:
+    file = os.path.basename(str(source or "Unknown"))
+    if isinstance(page, (int, float)):
+        page = int(page) + 1  # pypdf pages start at 0
+    if (file, page) in seen:
+        continue
+    seen.add((file, page))
+    print(f"  - {file} (page {page})")

@@ -10,7 +10,7 @@ Each project lives in its own folder with its own notebooks, data (where applica
 |---|---|---|
 | **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
 | **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
-| **Solar RAG** | [`solar_rag/`](solar_rag/) | General Streamlit RAG (LangChain + FAISS + Gemini) with Microsoft Fabric OneLake as durable storage for docs, index files, and chunk embeddings. |
+| **Solar RAG** | [`solar_rag/`](solar_rag/) | RAG over PDFs (LangChain + FAISS + Gemini). The chunk table is stored in the SolarRAG Fabric lakehouse. |
 
 ### `sales_predictor`
 
@@ -57,7 +57,7 @@ jupyter notebook solar_forecast.ipynb
 
 ### `solar_rag`
 
-General RAG chat over PDFs. Local FAISS + HuggingFace embeddings + Gemini; Fabric lakehouse **SolarRAG** stores docs, the FAISS files, and a Delta chunk table. See [`solar_rag/README.md`](solar_rag/README.md).
+Ask questions over PDFs. Ingest writes a local FAISS index and the Delta table `dbo.solar_rag_chunks`. Questions read that table through the SolarRAG SQL analytics endpoint. See [`solar_rag/README.md`](solar_rag/README.md).
 
 ```bash
 cd solar_rag
@@ -65,7 +65,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # set GOOGLE_API_KEY
 python ingest.py --skip-fabric
-streamlit run app.py
+python ask.py "What does the Sandia inverter performance model predict?"
 ```
 
 ## Repository layout
@@ -75,7 +75,7 @@ README.md
 .gitignore
 sales_predictor/                 # Fabric sales revenue forecasting
 solar_predictor/                 # Solar AC power prediction (CSV + notebook)
-solar_rag/                       # Streamlit RAG + Fabric OneLake storage
+solar_rag/                       # PDF RAG + Fabric OneLake storage
 Revenue_Forecast_Notebook.Notebook/   # Fabric-synced source for the sales notebook
 ```
 

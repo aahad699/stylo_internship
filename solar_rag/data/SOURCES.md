@@ -10,4 +10,4 @@
 | `arxiv_smart_inverters_pv_overview.pdf` | arXiv:2008.11125 | Smart inverters at high PV penetration |
 | `arxiv_residential_pv_inverters_dispatch.pdf` | arXiv:1407.0597 | Optimal dispatch of residential PV inverters |
 
-Publicly available research PDFs for RAG demos. Replace or add your own PDFs in this folder anytime, then re-run `python ingest.py`.
+Publicly available research PDFs for RAG demos.

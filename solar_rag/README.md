@@ -1,58 +1,45 @@
 # Solar RAG
 
 General-purpose Retrieval-Augmented Generation app that lives under `solar_rag/`.
-It indexes PDFs, answers questions with grounded citations, and uses **Microsoft Fabric
-OneLake** as the durable storage medium (docs + FAISS files + chunk Delta table).
+It indexes PDFs, answers questions with grounded citations, and stores the chunk
+table in a **Microsoft Fabric** lakehouse.
 
 Inspired by [langchain-rag-assistant](https://github.com/aahad699/langchain-rag-assistant):
-Streamlit chat, LangChain, local HuggingFace embeddings, Gemini, FAISS.
+LangChain, local HuggingFace embeddings, Gemini, FAISS.
 
 ## Architecture
 
 ```
 Ingest (python ingest.py)
 
-  data/*.pdf  →  load  →  chunk  →  embed (MiniLM)  →  FAISS (vectorstore/)
+  data/*.pdf  →  load  →  chunk  →  embed (BGE-base)  →  FAISS (vectorstore/)
                                               ↘
                                     optional Fabric sync
-                                      • Files/solar_rag/docs/
-                                      • Files/solar_rag/vectorstore/
                                       • Tables/dbo/solar_rag_chunks
 
-Query (streamlit run app.py  |  python ask.py "…")
+Query (python ask.py "…")
 
-  question → retrieve top-k → Gemini (context only) → answer + sources
+  question → SELECT dbo.solar_rag_chunks from the SQL endpoint
+           → keep the 4 closest rows → Gemini → answer + sources
 ```
 
 ## How Fabric fits in
 
-| Artifact | OneLake location |
-|----------|------------------|
-| Source PDFs | `Files/solar_rag/docs/` |
-| FAISS index | `Files/solar_rag/vectorstore/` |
+| Artifact | Where it lives |
+|----------|----------------|
+| PDFs and the FAISS index | On this laptop (`data/`, `vectorstore/`) |
 | Chunks + embeddings | Delta table `dbo.solar_rag_chunks` |
 
-**Fabric targets** (already set in `config.py`):
+**Fabric targets** (set at the top of `ingest.py` and `ask.py`):
 
 | | GUID |
 |--|--|
 | Workspace | `1aa55571-424f-4f72-ab00-18ec4ccb6cfb` |
 | Lakehouse | `8f082de5-0870-4e46-bc07-2ff0a4e6134e` |
 
-If the lakehouse display name in the portal is not `SolarRAG`, set `FABRIC_LAKEHOUSE_NAME` in `config.py` to that exact name (Spark mode only).
-
-**Two ways to sync / read OneLake** (same pattern as `sales_predictor`):
-
-| Mode | When | How |
-|------|------|-----|
-| Fabric Runtime | VS Code **Microsoft Fabric Runtime** kernel / portal | `spark` / `mssparkutils` talk to the lakehouse by name |
-| Local Python | laptop / this repo `.venv` | `az login` (or service principal) + `deltalake` / Azure Data Lake SDK over `abfss://…@onelake.dfs.fabric.microsoft.com` |
-
 Use `--skip-fabric` to build a local-only index without touching OneLake.
-
-Local sync uses the signed-in Azure CLI identity by default. To use a service
-principal instead, set `FABRIC_AUTH_MODE=service_principal` in `.env`; that
-principal must have Contributor access to the Fabric workspace.
+`python ingest.py` writes `dbo.solar_rag_chunks` with `deltalake` over OneLake.
+Sign in with `az login` before that command. `ask.py` uses the same login to query the SQL endpoint.
 
 ## Quick start
 
@@ -64,20 +51,13 @@ pip install -r requirements.txt
 cp .env.example .env               # put GOOGLE_API_KEY in .env
 
 python ingest.py --skip-fabric     # build local FAISS from data/*.pdf
-streamlit run app.py               # chat UI
 
-python ingest.py                   # local rebuild + push to OneLake
-```
-
-CLI ask without the UI:
-
-```bash
+az login
+python ingest.py                   # local rebuild + overwrite dbo.solar_rag_chunks
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 
-Without `GOOGLE_API_KEY`, ask/app still run in **retrieval-only** mode (top passages + sources). Set the key for Gemini-written answers.
-
-Demo URL (auto-asks the Sandia question once): `http://localhost:8501/?demo=sandia`
+`ask.py` reads `dbo.solar_rag_chunks` through the lakehouse SQL analytics endpoint. Sign in with `az login` first. Without `GOOGLE_API_KEY`, it prints the four matching passages. Set the key for a Gemini answer.
 
 ## Documents
 
@@ -87,11 +67,8 @@ Seed PDFs under `data/` (see `data/SOURCES.md`) — Sandia inverter model + arXi
 
 ```
 solar_rag/
-├── app.py              # Streamlit chat
-├── ask.py              # retrieve → Gemini → answer
-├── ingest.py           # PDFs → FAISS (+ Fabric sync)
-├── fabric_store.py     # OneLake Files + Delta helpers
-├── config.py           # models, paths, Fabric ids
+├── ask.py              # SQL query, then Gemini
+├── ingest.py           # PDFs → FAISS, then the chunk table
 ├── data/               # source PDFs
 ├── vectorstore/        # local FAISS (gitignored)
 ├── requirements.txt
@@ -100,4 +77,4 @@ solar_rag/
 
 ## LLM choice
 
-**Google Gemini `gemini-2.5-flash`** for generation (free-tier API key, same as the inspiration project) and **local `all-MiniLM-L6-v2`** embeddings (no embedding API cost). Set `GOOGLE_API_KEY` in `.env`.
+**Google Gemini `gemini-2.5-flash`** for generation (free-tier API key, same as the inspiration project) and **local `BAAI/bge-base-en-v1.5`** embeddings (no embedding API cost). Set `GOOGLE_API_KEY` in `.env`.
