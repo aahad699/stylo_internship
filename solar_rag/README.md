@@ -5,17 +5,14 @@ It indexes PDFs, answers questions with grounded citations, and stores the chunk
 table in a **Microsoft Fabric** lakehouse.
 
 Inspired by [langchain-rag-assistant](https://github.com/aahad699/langchain-rag-assistant):
-LangChain, local HuggingFace embeddings, Gemini, FAISS.
+LangChain, local HuggingFace embeddings, Gemini.
 
 ## Architecture
 
 ```
 Ingest (python ingest.py)
 
-  data/*.pdf  →  load  →  chunk  →  embed (BGE-base)  →  FAISS (vectorstore/)
-                                              ↘
-                                    Fabric sync
-                                      • Tables/dbo/solar_rag_chunks
+  data/*.pdf  →  load  →  chunk  →  embed (BGE-base)  →  dbo.solar_rag_chunks
 
 Query (python ask.py "…")
 
@@ -27,7 +24,7 @@ Query (python ask.py "…")
 
 | Artifact | Where it lives |
 |----------|----------------|
-| PDFs and the FAISS index | On this laptop (`data/`, `vectorstore/`) |
+| PDFs | On this laptop (`data/`) |
 | Chunks + embeddings | Delta table `dbo.solar_rag_chunks` |
 
 **Fabric targets** (set at the top of `ingest.py` and `ask.py`):
@@ -37,7 +34,7 @@ Query (python ask.py "…")
 | Workspace | `1aa55571-424f-4f72-ab00-18ec4ccb6cfb` |
 | Lakehouse | `8f082de5-0870-4e46-bc07-2ff0a4e6134e` |
 
-`python ingest.py` writes the local FAISS index and `dbo.solar_rag_chunks`.
+`python ingest.py` writes `dbo.solar_rag_chunks`.
 Sign in with `az login` before that command. `ask.py` uses the same login to query the SQL endpoint.
 
 ## Quick start
@@ -50,7 +47,7 @@ pip install -r requirements.txt
 cp .env.example .env               # put GOOGLE_API_KEY in .env
 
 az login
-python ingest.py                   # local FAISS index + dbo.solar_rag_chunks
+python ingest.py                   # build dbo.solar_rag_chunks
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 
@@ -65,9 +62,8 @@ Seed PDFs under `data/` (see `data/SOURCES.md`) — Sandia inverter model + arXi
 ```
 solar_rag/
 ├── ask.py              # SQL query, then Gemini
-├── ingest.py           # PDFs → FAISS, then the chunk table
+├── ingest.py           # PDFs → chunk table
 ├── data/               # source PDFs
-├── vectorstore/        # local FAISS (gitignored)
 ├── requirements.txt
 └── .env.example
 ```

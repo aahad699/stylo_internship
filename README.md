@@ -10,7 +10,7 @@ Each project lives in its own folder with its own notebooks, data (where applica
 |---|---|---|
 | **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
 | **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
-| **Solar RAG** | [`solar_rag/`](solar_rag/) | RAG over PDFs (LangChain + FAISS + Gemini). The chunk table is stored in the SolarRAG Fabric lakehouse. |
+| **Solar RAG** | [`solar_rag/`](solar_rag/) | RAG over PDFs (LangChain + Gemini). The chunk table is stored in the SolarRAG Fabric lakehouse. |
 
 ### `sales_predictor`
 
@@ -57,7 +57,7 @@ jupyter notebook solar_forecast.ipynb
 
 ### `solar_rag`
 
-Ask questions over PDFs. Ingest writes a local FAISS index and the Delta table `dbo.solar_rag_chunks`. Questions read that table through the SolarRAG SQL analytics endpoint. See [`solar_rag/README.md`](solar_rag/README.md).
+Ask questions over PDFs. Ingest writes the Delta table `dbo.solar_rag_chunks`. Questions read that table through the SolarRAG SQL analytics endpoint. See [`solar_rag/README.md`](solar_rag/README.md).
 
 ```bash
 cd solar_rag
