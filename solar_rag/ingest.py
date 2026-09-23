@@ -4,26 +4,9 @@
 #   python ingest.py
 #   python ingest.py --skip-fabric
 
-import argparse
-import base64
-import os
-import struct
 from pathlib import Path
 
-try:
-    import truststore
-    truststore.inject_into_ssl()
-except ImportError:
-    pass
-
-import pandas as pd
-from azure.identity import AzureCliCredential
-from deltalake import write_deltalake
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
@@ -43,6 +26,8 @@ TABLE_PATH = (
     f"{LAKEHOUSE_ID}/Tables/dbo/solar_rag_chunks"
 )
 
+import argparse
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--skip-fabric", action="store_true")
 skip_fabric = parser.parse_args().skip_fabric
@@ -51,6 +36,8 @@ pdf_files = sorted(DATA_DIR.glob("*.pdf"))
 if not pdf_files:
     raise SystemExit(f"No PDFs found in {DATA_DIR}")
 
+from langchain_community.document_loaders import PyPDFLoader
+
 print(f"Loading {len(pdf_files)} PDF(s) from {DATA_DIR}")
 documents = []
 for pdf in pdf_files:
@@ -58,6 +45,8 @@ for pdf in pdf_files:
     documents.extend(pages)
     print(f"  {pdf.name}: {len(pages)} page(s)")
 print(f"Loaded {len(documents)} page(s)")
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
@@ -75,6 +64,15 @@ for chunk in splitter.split_documents(documents):
 if not chunks:
     raise SystemExit("No text could be extracted from the PDFs.")
 print(f"Split into {len(chunks)} usable chunk(s)")
+
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
 
 print(f"Loading embedding model {EMBEDDING_MODEL}")
 embeddings = HuggingFaceEmbeddings(
@@ -96,6 +94,14 @@ print(f"Saved FAISS index -> {VECTORSTORE_DIR}")
 if skip_fabric:
     print("Skipping Fabric sync.")
     raise SystemExit(0)
+
+import base64
+import os
+import struct
+
+import pandas as pd
+from azure.identity import AzureCliCredential
+from deltalake import write_deltalake
 
 rows = []
 for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
