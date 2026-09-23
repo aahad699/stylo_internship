@@ -2,10 +2,6 @@
 # then write those chunks to dbo.solar_rag_chunks.
 #   python ingest.py
 
-#-- read .env --
-from dotenv import load_dotenv
-load_dotenv()
-
 #-- project folders --
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
@@ -62,26 +58,17 @@ vectors = embeddings.embed_documents(texts)
 
 #-- pack the vectors and write dbo.solar_rag_chunks --
 import base64
-import os
 import struct
 import pandas as pd
 from azure.identity import AzureCliCredential
 from deltalake import write_deltalake
 rows = []
-for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-    meta = chunk.metadata or {}
-    page = meta.get("page")
-    values = [float(item) for item in vector]
-    raw = struct.pack(f"<{len(values)}f", *values)
-    rows.append(
-        {
-            "chunk_id": i,
-            "text": chunk.page_content,
-            "source": os.path.basename(str(meta.get("source", ""))),
-            "page": int(page) if isinstance(page, int) else page,
-            "embedding": base64.b64encode(raw).decode("ascii"),
-        }
-    )
+for chunk, vector in zip(chunks, vectors):
+    raw = struct.pack(f"<{len(vector)}f", *vector)
+    rows.append({
+        "text": chunk.page_content,
+        "embedding": base64.b64encode(raw).decode("ascii"),
+    })
 
 print("Writing dbo.solar_rag_chunks to OneLake")
 token = AzureCliCredential().get_token("https://storage.azure.com/.default").token
