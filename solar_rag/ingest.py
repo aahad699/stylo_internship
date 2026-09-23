@@ -23,10 +23,7 @@ print(f"Loaded {len(documents)} page(s)")
 
 #-- split pages into overlapping chunks and drop the short scraps --
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200,
-)
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 chunks = []
 for chunk in splitter.split_documents(documents):
     text = chunk.page_content or ""

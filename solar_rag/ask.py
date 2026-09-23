@@ -45,8 +45,7 @@ except ImportError:
 from langchain_huggingface import HuggingFaceEmbeddings
 embeddings = HuggingFaceEmbeddings(
     model_name="BAAI/bge-base-en-v1.5",
-    query_encode_kwargs={"normalize_embeddings": True,
-                          "prompt": "Represent this sentence for searching relevant passages: "},
+    query_encode_kwargs={"normalize_embeddings": True,"prompt": "Represent this sentence for searching relevant passages: "},
 )
 query = embeddings.embed_query(question)
 
