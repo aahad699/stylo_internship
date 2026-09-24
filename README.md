@@ -1,6 +1,6 @@
 # Stylo Internship
 
-Portfolio repository for internship work at Stylo. It currently holds **three** independent projects; more will be added as the internship progresses.
+Portfolio repository for internship work at Stylo. It currently holds **four** independent projects; more will be added as the internship progresses.
 
 Each project lives in its own folder with its own notebooks, data (where applicable), and run notes. There is no single shared app stack for the whole repo.
 
@@ -11,6 +11,7 @@ Each project lives in its own folder with its own notebooks, data (where applica
 | **Sales predictor** | [`sales_predictor/`](sales_predictor/) | Microsoft Fabric / OneLake revenue forecasting from `Gold.dbo.factsales_gold` (multi-model notebook plus a simpler linear + Prophet notebook). |
 | **Solar predictor** | [`solar_predictor/`](solar_predictor/) | Predicts solar plant inverter **AC power** from Plant 1 generation and weather sensor CSVs (EDA, cleaning, features, scaled linear regression). |
 | **Solar RAG** | [`solar_rag/`](solar_rag/) | RAG over PDFs (LangChain + Gemini). The chunk table is stored in the SolarRAG Fabric lakehouse. |
+| **Sales RAG** | [`sales_rag/`](sales_rag/) | Question over the Gold warehouse: one prompt turns the question into SQL, then answers from the result rows. |
 
 ### `sales_predictor`
 
@@ -69,6 +70,18 @@ python ingest.py
 python ask.py "What does the Sandia inverter performance model predict?"
 ```
 
+### `sales_rag`
+
+Ask questions against the Gold mirrored warehouse. `ask_nlp.py` uses one prompt twice: first with the table schema to write a SELECT, then with the query rows to answer. See [`sales_rag/README.md`](sales_rag/README.md).
+
+```bash
+cd sales_rag
+pip install -r requirements.txt
+cp .env.example .env   # set GOOGLE_API_KEY
+az login
+python ask_nlp.py "What was total revenue in 2020?"
+```
+
 ## Repository layout
 
 ```
@@ -77,6 +90,7 @@ README.md
 sales_predictor/                 # Fabric sales revenue forecasting
 solar_predictor/                 # Solar AC power prediction (CSV + notebook)
 solar_rag/                       # PDF RAG + Fabric OneLake storage
+sales_rag/                       # Gold warehouse question → SQL → answer
 Revenue_Forecast_Notebook.Notebook/   # Fabric-synced source for the sales notebook
 ```
 
