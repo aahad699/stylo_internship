@@ -1,0 +1,5 @@
+[
+  {"id":"overview-travel-gm","category":"overview","designation":"general_manager","question":"travel policy","expect":"answered","must_contain_any":["travel","management"],"must_not_contain":["couldn't find"]},
+  {"id":"overview-pf-gm","category":"overview","designation":"general_manager","question":"provident fund policy","expect":"answered","must_contain_any":["eligible","eligibility","months"],"must_not_contain":["couldn't find"]},
+  {"id":"overview-travel-intern","category":"overview","designation":"intern","question":"travel policy","expect":"refused","accept_also":["dont_know"],"must_not_contain":["24,000","15,500","1,800"]}
+]

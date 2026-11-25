@@ -1,0 +1,18 @@
+{
+  "name": "hr-desk-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --project=ui",
+    "test:access": "playwright test --project=access",
+    "test:matrix": "playwright test --project=matrix",
+    "report": "node lib/summarize.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0"
+  }
+}

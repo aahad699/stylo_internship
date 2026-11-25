@@ -1,0 +1,14 @@
+import { readdirSync, readFileSync } from "node:fs";
+const short = { "Code of Conduct": "CoC", "Corrective Action Policy": "CAP", "Provident Fund Loan Policy – Head Office": "PF", "User Guidelines - Advance Salary (HO - RSC)": "ADV", "Medical Insurance Policy": "MED", "Travel Policy": "TRV" };
+const cols = ["CoC", "CAP", "PF", "ADV", "MED", "TRV"];
+const rows = readdirSync("report/visibility").flatMap((f) => JSON.parse(readFileSync(`report/visibility/${f}`, "utf8")));
+const by = {};
+for (const r of rows) (by[r.designation] ??= {})[short[r.policy]] = r;
+const cell = (r) => !r ? "?" : r.configured === "true" ? (r.outcome === "answered" ? "ok" : `MISS:${r.outcome}`) : (r.leaked === "true" ? "LEAK" : r.outcome === "answered" ? "wrong-policy" : "-");
+console.log("designation".padEnd(28) + cols.map((c) => c.padEnd(16)).join(""));
+for (const d of Object.keys(by).sort()) console.log(d.padEnd(28) + cols.map((c) => cell(by[d][c]).padEnd(16)).join(""));
+console.log("\nLEAKS:");
+for (const r of rows.filter((r) => r.leaked === "true")) console.log(`- ${r.designation} | ${r.policy} | ${r.answer}`);
+const tally = {};
+for (const r of rows.filter((r) => r.configured === "true" && r.outcome !== "answered")) tally[`${short[r.policy]} ${r.outcome}`] = (tally[`${short[r.policy]} ${r.outcome}`] ?? 0) + 1;
+console.log("\nMISSES:", tally);

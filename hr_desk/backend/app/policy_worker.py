@@ -27,8 +27,8 @@ async def run_policy_worker(pipeline) -> None:
                         await asyncio.to_thread(store.renew_policy_job, job["id"], job["claim"])
                 await task
                 continue
-        except Exception:
-            logger.exception("Policy job worker failed")
+        except Exception as error:
+            logger.error("error_class=%s request_id=- status=500", type(error).__name__)
         await asyncio.sleep(2)
 
 
@@ -45,8 +45,8 @@ def process_policy_job(pipeline, job: dict) -> None:
             _publish(pipeline, job, claim)
     except ValueError as exc:
         store.fail_policy_job(*claim, str(exc))
-    except Exception:
-        logger.exception("Policy job %s failed", job["id"])
+    except Exception as error:
+        logger.error("error_class=%s request_id=%s status=500", type(error).__name__, job["id"])
         store.fail_policy_job(*claim, "Processing did not finish. Your upload or draft is saved for retry.")
 
 

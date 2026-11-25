@@ -5,7 +5,8 @@ from __future__ import annotations
 import re #regular expressions
 from dataclasses import dataclass
 
-from .config import EMPTY_QUESTION, MAX_USER_CHARS, REFUSAL, TOO_LONG
+from .config import EMPTY_QUESTION, MAX_USER_CHARS, TOO_LONG
+from .replies import REFUSAL
 from .textutil import normalize_for_rules
 
 _JAILBREAKS = (
@@ -33,8 +34,21 @@ _PAY = (
 )
 
 _NAMED_PAY = (
-    re.compile(r"\b[A-Z][a-z]{2,}'s (salary|pay|compensation)\b"),
-    re.compile(r"\bhow much does [A-Z][a-z]{2,} (earn|make|get paid)\b"),
+    re.compile(r"\b[A-Z][a-z]{2,}'s (salary|pay|compensation)\b(?!\s+(?:advance|policy|bands?))"),
+    re.compile(r"\b(?i:how much does) [A-Z][a-z]{2,} (?i:earn|make|get paid)\b"),
+)
+_CLAIMED_ACCESS = re.compile(
+    r"\b(?:i(?: am|['’]m)|my designation is|act as|pretend (?:i am|to be))\s+(?:the\s+|an?\s+)?"
+    r"(?:ceo|chief executive(?: officer)?|admin|administrator)\b", re.I,
+)
+_PAY_RECORD = re.compile(
+    r"\b(?:name|employee name|employee)\s*:\s*[^\n|;]+?\s*"
+    r"(?:[|;\n]\s*|\.\s+|\s+)(?:base\s+)?(?:salary|pay|compensation)\s*:\s*(?:Rs\.?\s*|PKR\s*)?\d",
+    re.I,
+)
+_NAMED_EARNINGS = re.compile(
+    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\s+"
+    r"(?:earns|is paid|receives (?:a salary of|pay of))\s+(?:(?i:Rs\.?|PKR)\s*|[$£€]\s*)?\d"
 )
 
 _UNSURE = (
@@ -66,13 +80,21 @@ def check_question(question: str) -> GuardDecision:
     if len(text) > MAX_USER_CHARS:
         return GuardDecision("block", TOO_LONG, "too_long")
     folded = normalize_for_rules(text)
-    if any(pattern.search(folded) for pattern in _JAILBREAKS):
+    if any(pattern.search(folded) for pattern in _JAILBREAKS) or _CLAIMED_ACCESS.search(text):
         return GuardDecision("block", REFUSAL, "jailbreak")
-    if any(pattern.search(folded) for pattern in _PAY) or any(pattern.search(text) for pattern in _NAMED_PAY):
+    if contains_named_pay(text):
         return GuardDecision("pay", REFUSAL, "pay")
     if any(pattern.search(folded) for pattern in _UNSURE):
         return GuardDecision("unsure", "", "unsure")
     return GuardDecision("allow", "", "ok")
+
+
+def contains_named_pay(text: str) -> bool:
+    normalized = text.replace("’", "'")
+    folded = normalize_for_rules(normalized)
+    return (any(pattern.search(folded) for pattern in _PAY)
+            or any(pattern.search(normalized) for pattern in _NAMED_PAY)
+            or bool(_PAY_RECORD.search(normalized) or _NAMED_EARNINGS.search(normalized)))
 
 
 def moderation_blocks(categories: dict, flagged: bool, text: str) -> bool:

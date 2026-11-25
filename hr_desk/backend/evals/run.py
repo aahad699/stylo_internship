@@ -14,6 +14,7 @@ import yaml
 from app.config import openai_api_key
 from app.factory import build_pipeline
 from app.pipeline import Pipeline
+from app.replies import REFUSAL
 from app.sanitize import sanitize
 from app.store_memory import MemoryStore
 
@@ -29,6 +30,8 @@ class Check:
     primary: bool = False
     developer_detail: str = ""
     case_id: str = ""
+    answer: str = ""
+    word_count: int | None = None
 
 
 def load_cases() -> list[dict]:
@@ -47,6 +50,8 @@ def run_deterministic() -> list[Check]:
     pipeline = _offline_pipeline()
     checks: list[Check] = []
     for case in load_cases():
+        if case.get("live_role"):
+            continue
         if case.get("kind") == "sanitize":
             checks.append(_sanitize_case(case))
             continue
@@ -54,25 +59,40 @@ def run_deterministic() -> list[Check]:
     return checks
 
 
-def run_live() -> list[Check]:
+def live_cases() -> list[dict]:
     email = os.environ.get("HR_DESK_EVAL_EMPLOYEE_EMAIL", "").strip().lower()
     if not email:
         raise RuntimeError("Set HR_DESK_EVAL_EMPLOYEE_EMAIL to an account with access to the summary report.")
-    pipeline = build_pipeline()
     case = {
         "id": "live_summary",
         "name": "A live answer about the summary report stays inside the policy",
         "primary": True,
+        "show_answer": True,
         "email": email,
         "question": "give me details about summart report",
+        "history": [{"role": "user", "text": "How do I get travel approval?"}],
         "expect": {
             "outcome": "answered",
             "passage_must_contain": ["Inquiry officer findings"],
-            "answer_must_not_contain": ["warning letter"],
-            "model_called": True,
+            "answer_must_not_contain": ["warning letter", "if you want", "if you need", "i can",
+                                        "next step", "let me know", "download", "template link"],
+            "exact_summary_fields": True,
+            "model_called": False,
         },
     }
-    return [_ask_case(pipeline, case)]
+    cases = [case]
+    for extra in load_cases():
+        role = extra.get("live_role")
+        if role:
+            account = os.environ.get(f"HR_DESK_EVAL_{role.upper()}_EMAIL", "").strip().lower()
+            if account:
+                cases.append({**extra, "email": account})
+    return cases
+
+
+def run_live() -> list[Check]:
+    pipeline = build_pipeline()
+    return [_ask_case(pipeline, case) for case in live_cases()]
 
 
 def run_screen_checks() -> dict:
@@ -142,7 +162,7 @@ def main() -> int:
                     name="A live answer about the summary report stays inside the policy",
                     ok=False,
                     primary=True,
-                    developer_detail=str(exc),
+                    developer_detail=type(exc).__name__,
                     case_id="live_summary",
                 )
             )
@@ -153,6 +173,10 @@ def main() -> int:
         if check.developer_detail and not check.ok:
             line += f" — {check.developer_detail}"
         print(line)
+        if check.word_count is not None:
+            print(f"  {check.word_count} words (target 40, over by {max(0, check.word_count - 40)})")
+        if check.answer:
+            print(check.answer)
     print(payload["summary"])
     if any(not check.ok for check in checks):
         return 1
@@ -172,7 +196,15 @@ def _employee(pipeline, email: str):
 def _ask_case(pipeline, case: dict) -> Check:
     result, trace, detail = _run_question(pipeline, case)
     if detail:
-        return _failed(case, detail)
+        check = _failed(case, detail)
+    else:
+        check = _passed(case)
+    if case.get("live_role") or case.get("show_answer"):
+        check.answer = result.answer
+    if case.get("measure_length"):
+        check.word_count = len(result.answer.split())
+    if detail:
+        return check
     if case.get("then_repeat"):
         before = _answer_calls(pipeline)
         repeated, repeated_trace = _ask(pipeline, case)
@@ -182,7 +214,7 @@ def _ask_case(pipeline, case: dict) -> Check:
             return _failed(case, f"Expected a saved answer, cache was {repeated_trace.cache}.")
         if _answer_calls(pipeline) != before:
             return _failed(case, "The repeated question called the model again.")
-    return _passed(case)
+    return check
 
 
 def _run_question(pipeline, case: dict):
@@ -206,7 +238,14 @@ def _run_question(pipeline, case: dict):
 
 def _ask(pipeline, case: dict):
     person = _employee(pipeline, case["email"])
-    result = pipeline.ask(person, case["question"], case.get("history") or [])
+    history = case.get("history") or []
+    if first_question := case.get("after_question"):
+        first = pipeline.ask(person, first_question, history)
+        history = [
+            *history, {"role": "user", "text": first_question},
+            {"role": "assistant", "text": first.answer, "passage_ids": first.passage_ids},
+        ]
+    result = pipeline.ask(person, case["question"], history)
     trace = pipeline.store.get_trace(result.trace_id)
     return result, trace
 
@@ -224,6 +263,36 @@ def _expect_detail(expect: dict, result, trace) -> str:
         return f"Outcome was {result.outcome}, expected {expect['outcome']}."
     if "answer_is" in expect and result.answer != expect["answer_is"]:
         return f"Answer was: {result.answer}"
+    if expect.get("fixed_refusal") and result.answer != REFUSAL:
+        return "The response did not match the fixed refusal."
+    if "max_words" in expect and len(result.answer.split()) > expect["max_words"]:
+        return f"Answer exceeded {expect['max_words']} words."
+    if expect.get("exact_summary_fields"):
+        fields = summary_source_fields(result.citations)
+        expected_answer = "Investigation Summary Report fields\n\n" + "\n".join(f"- {field}" for field in fields)
+        if not fields or result.answer != expected_answer:
+            return "Summary Report fields were missing, changed, out of order, or followed by extra text."
+    if expect.get("gm_travel_units"):
+        sections = dict(re.findall(r"\*\*([^*]+)\*\*\s*\n\s*(.*?)(?=\n\n\*\*|\Z)", result.answer, re.S))
+        fuel = sections.get("Fuel allowance", "")
+        sizes = re.findall(r"\b(\d+)cc\b", fuel)
+        if sizes != ["70", "125", "1300", "1500"]:
+            return f"Unexpected GM fuel sizes or order: {sizes}."
+        if re.findall(r"Rs\. ([\d.]+) per km", fuel) != ["2.0", "2.5", "4.0", "5.0"]:
+            return "Fuel rates did not preserve the source amounts and units."
+        if re.findall(r"Rs\. ([\d,]+)", sections.get("Hotel allowance", "")) != ["24,000", "28,000", "15,500"]:
+            return "Hotel rates did not preserve the source amounts and currency."
+        if "Rs. 1,800 per day" not in sections.get("Daily allowance", ""):
+            return "Daily allowance did not include the source currency and period."
+        medical = sections.get("Health insurance", "")
+        if "Rs." in medical or not all(term in medical for term in ("500,000", "12,000 per day")):
+            return "Medical limits must preserve the printed values and per-day label without inferring a currency."
+    index = 0
+    for phrase in expect.get("in_order") or []:
+        found = result.answer.find(phrase, index)
+        if found < 0:
+            return f"Expected in order: {phrase}"
+        index = found + len(phrase)
     if expect.get("searched") is False and trace.search != "skipped":
         return "Search ran when it should not have."
     if expect.get("searched") is True and trace.search != "done":
@@ -274,9 +343,15 @@ def _text_rules(answer: str, case: dict) -> str:
         if str(needed) not in answer:
             return f"The answer did not include {needed}. Answer: {answer}"
     for banned in case.get("answer_must_not_contain") or []:
-        if str(banned) in answer:
+        if str(banned).casefold() in answer.casefold():
             return f"The answer included {banned}."
     return ""
+
+
+def summary_source_fields(citations) -> list[str]:
+    prefix = "Investigation Summary Report template. "
+    return [field for item in citations if item.text.startswith(prefix)
+            for field in item.text.removeprefix(prefix).rstrip(".").split(". ")]
 
 
 def _answer_calls(pipeline) -> int:

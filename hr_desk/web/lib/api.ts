@@ -78,6 +78,7 @@ export type QuestionRow = {
   policy: string;
   when: string;
   steps: { label: string; detail: string }[];
+  has_passages: boolean;
   technical: Record<string, unknown>;
 };
 

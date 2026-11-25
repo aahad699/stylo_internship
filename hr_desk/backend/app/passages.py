@@ -15,6 +15,7 @@ from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
+from .aliases import embed_input
 from .config import CHUNK_CHARS, CHUNK_OVERLAP
 from .models import ChunkDraft, PolicyDraft
 from .transcribe import save_picture, transcribe_picture
@@ -1008,7 +1009,7 @@ def _chunks(
     pieces = _split_section(body)
     found = []
     for piece in pieces:
-        embed = "\n".join(part for part in (title[:200], heading_path[:600], piece) if part)
+        embed = embed_input(title[:200], heading_path[:600], heading, piece)
         found.append(
             ChunkDraft(
                 section_label=label,
@@ -1429,12 +1430,12 @@ _TRAVEL_PAGES: list[list[dict]] = [
         {
             "heading": "7. Daily Tour Allowance for Field-Based Employees",
             "kind": "table",
-            "body": "Regional Sales Manager. 600. 1,500.",
+            "body": "Daily tour allowance rates. Regional Sales Manager. 600. 1,500.",
         },
         {
             "heading": "7. Daily Tour Allowance for Field-Based Employees",
             "kind": "table",
-            "body": "Area Sales Manager. 500. 1,000.",
+            "body": "Daily tour allowance rates. Area Sales Manager. 500. 1,000.",
         },
         {
             "heading": "8. Travel Expense Form",

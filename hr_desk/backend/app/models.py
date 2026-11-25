@@ -69,6 +69,8 @@ class Citation:
     label: str
     text: str
     image: str = ""
+    passage_id: str = ""
+    title: str = ""
 
 
 @dataclass
@@ -76,6 +78,7 @@ class Completion:
     text: str
     tokens_in: int = 0
     tokens_out: int = 0
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -105,6 +108,7 @@ class TraceRecord:
     citations: list[Citation] = field(default_factory=list)
     steps: list[dict] = field(default_factory=list)
     prompt_version: str = ""
+    passage_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -114,3 +118,4 @@ class AskResult:
     citations: list[Citation]
     trace_id: str
     valid_until: date | None = None
+    passage_ids: list[str] = field(default_factory=list)

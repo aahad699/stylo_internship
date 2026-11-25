@@ -174,6 +174,7 @@ function QuestionItem({ row, onRemoved }: { row: QuestionRow; onRemoved: (messag
               </li>
             ))}
           </ol>
+          {row.has_passages ? <QuestionPassages questionId={row.id} /> : null}
           <details>
             <summary>Details for IT</summary>
             <pre>{JSON.stringify(row.technical, null, 2)}</pre>
@@ -181,5 +182,37 @@ function QuestionItem({ row, onRemoved }: { row: QuestionRow; onRemoved: (messag
         </div>
       ) : null}
     </li>
+  );
+}
+
+function QuestionPassages({ questionId }: { questionId: string }) {
+  const [passages, setPassages] = useState<{ title: string; label: string; text: string }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div>
+      {passages === null ? (
+        <button type="button" disabled={loading} onClick={() => {
+          setLoading(true);
+          setError("");
+          api<{ passages: { title: string; label: string; text: string }[] }>(`/api/questions/${questionId}/passages`)
+            .then((result) => setPassages(result.passages))
+            .catch(() => setError("Policy text could not be loaded. Try again."))
+            .finally(() => setLoading(false));
+        }}>
+          {loading ? "Loading policy text…" : "Show policy text"}
+        </button>
+      ) : passages.length ? (
+        <ul>
+          {passages.map((passage, index) => (
+            <li key={`${passage.label}-${index}`}>
+              <strong>{passage.label || passage.title}</strong>
+              <p style={{ whiteSpace: "pre-wrap" }}>{passage.text}</p>
+            </li>
+          ))}
+        </ul>
+      ) : <p role="status">This policy text is no longer available.</p>}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 export type AnswerBlock =
   | { type: "paragraph"; text: string }
+  | { type: "heading"; text: string }
   | { type: "list"; items: string[] }
   | { type: "table"; caption: string; headers: string[]; rows: string[][] };
 
@@ -103,6 +104,12 @@ function blocksFromProse(raw: string, labels: string[]): AnswerBlock[] {
       continue;
     }
     flushList();
+    const heading = piece.text.match(/^\*\*([^*\n]+)\*\*$/);
+    if (heading) {
+      flushFields();
+      blocks.push({ type: "heading", text: heading[1] });
+      continue;
+    }
     const lines = /^\d+(?:\.\d+)+\.?\s/.test(piece.text) ? [piece.text] : sentences(piece.text);
     for (const sentence of lines) {
       if (isHeadingEcho(sentence, labels)) continue;

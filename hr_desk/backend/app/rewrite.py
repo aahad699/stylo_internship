@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from .config import CHAT_CONTEXT_BYTES, HISTORY_TURNS
 from .textutil import token_set
 
-_FOLLOW = re.compile(r"(?i)^(?:what|how) about\s+(.+?)\s*\??$")
+_FOLLOW = re.compile(r"(?i)^(?:(?:and|also)\s+)?(?:what|how) about\s+(.+?)\s*\??$")
 _CONTINUE = re.compile(r"(?i)^(and|also|same|again|more|else|that|this|it|its|why|how)\b")
 _FOLLOW_UP_WORDS = {"not", "again", "more", "else", "same", "also"}
+_ATTRIBUTE_WORDS = {"maximum", "minimum", "max", "min", "amount", "limit", "rate", "percentage", "deadline",
+                    "duration", "period", "much", "long", "days", "months", "eligible", "eligibility"}
 _RECALL = re.compile(
     r"(?i)^(?:(?:what(?:'s|s|\s+(?:is|was))|(?:show|repeat|tell) me)\s+)?"
     r"(?:my|the)\s+(first|second|third|last|previous|\d{1,3}(?:st|nd|rd|th)?)\s+(?:saved\s+)?question[?.!]*$"
@@ -25,8 +27,7 @@ _IMPLIED_REFERENCE = re.compile(
 )
 _PRONOUN_REFERENCE = re.compile(
     r"(?i)^(?:(?:and|also)\s+)?(?:who|what|when|where|why|how|does|do|can|is|are)\s+"
-    r"(?:[\w'-]+\s+){0,5}(?:it|this|that)"
-    r"(?:\s+(?:for|apply|cover|mean|work|allowed|required|submitted|approved|due))?[?.!]*$"
+    r"(?:[\w'-]+\s+){0,5}(?:it|this|that)(?:\s+[\w'-]+)?[?.!]*$"
 )
 
 
@@ -95,6 +96,13 @@ def rewrite_question(question: str, history: list[dict]) -> Rewrite:
     follow = _FOLLOW.match(text)
     if follow and prior:
         topic = follow.group(1).strip()
+        travel_prior = re.search(
+            r"\b(?:daily allowance|fuel|mileage|hotel|lodging|travel allowance|tour allowance|DA|TA)\b",
+            prior,
+            re.I,
+        )
+        if travel_prior and re.search(r"\b(?:hotel|lodging|fuel|mileage|allowance)\b", topic, re.I):
+            return Rewrite(f"what is my {topic}", prior, "follow-up")
         shared = token_set(topic) & token_set(prior)
         if shared:
             return Rewrite(topic, prior, "follow-up")
@@ -102,7 +110,8 @@ def rewrite_question(question: str, history: list[dict]) -> Rewrite:
     words = re.findall(r"[A-Za-z0-9']+", text)
     # "and for managers" and "why not" still need the previous question.
     # "ceo" and "message from ceo" name their own subject, so history stays out.
-    if prior and _CONTINUE.match(text):
+    if prior and (_CONTINUE.match(text) or topic_words(text) <= _ATTRIBUTE_WORDS):
+        # "What is the maximum amount?" asks about a property of the previous subject without naming it.
         return Rewrite(text, prior, "model", needs_model=True)
     if len(words) >= 4 or topic_words(text):
         note = "topic-change" if prior else "no-history"

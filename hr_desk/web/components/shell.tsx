@@ -56,7 +56,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         ) : null}
       </header>
-      <main id="main" className="frame page">
+      <main id="main" className={pathname === "/" && me ? "chat-page" : "frame page"}>
         {loading ? <p role="status">Loading…</p> : children}
       </main>
     </>

@@ -1,0 +1,225 @@
+# Authored checks for the answer re-run. These are not employee questions.
+- id: new_300_direct
+  question: When does the 300 km rule apply?
+  designation: general_manager
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:26"]
+  answer: true
+  must_contain: ["300"]
+- id: new_hotel_follow
+  question: what about hotel
+  designation: general_manager
+  category: follow_up
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:48"]
+  history:
+    - {role: user, text: "What is my daily allowance?"}
+    - {role: assistant, text: "Rs. 1,800 per day."}
+  answer: true
+  must_contain: ["hotel"]
+- id: new_tour_asm
+  question: What is my tour allowance?
+  designation: area_sales_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:35"]
+  answer: true
+- id: new_health_gm
+  question: What is my health insurance plan?
+  designation: general_manager
+  category: alias
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+  answer: true
+- id: new_takaful_hr
+  question: What does the takaful policy cover?
+  designation: hr
+  category: alias
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:2"]
+  match: any
+  answer: true
+- id: new_lodging
+  question: What lodging can I use?
+  designation: executive
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:50"]
+  answer: true
+- id: new_mileage
+  question: What is my mileage rate?
+  designation: officer
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:53"]
+  match: any
+  answer: true
+- id: new_da_short
+  question: DA for me
+  designation: senior_manager
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:30"]
+  answer: true
+- id: new_pf_short
+  question: How does PF work?
+  designation: manager
+  category: alias
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:12"]
+  match: any
+  answer: true
+- id: new_fir
+  question: What is an FIR?
+  designation: hr
+  category: alias
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:102"]
+  match: any
+  answer: true
+- id: new_values
+  question: List the company values.
+  designation: intern
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:5"]
+  answer: true
+- id: new_dress
+  question: What happens if I ignore the dress code?
+  designation: people_specialist
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:33"]
+  match: any
+  answer: true
+- id: new_claim
+  question: Which fields are on the travel claim form?
+  designation: general_manager
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:45"]
+  answer: true
+- id: new_approver
+  question: Who approves my travel?
+  designation: general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:4"]
+  match: any
+  answer: true
+- id: new_gym
+  question: Is the gym membership reimbursed?
+  designation: general_manager
+  category: no_answer
+  document: ""
+  expected: []
+  answer: true
+- id: new_wfh
+  question: Can I work from home on Fridays?
+  designation: hr
+  category: no_answer
+  document: ""
+  expected: []
+  answer: true
+- id: new_bonus
+  question: When is the annual bonus paid?
+  designation: officer
+  category: no_answer
+  document: ""
+  expected: []
+  answer: true
+- id: new_old_travel
+  question: Show me the 2023 travel policy.
+  designation: general_manager
+  category: superseded
+  document: Travel Policy
+  expected: []
+  answer: true
+  must_contain: ["2025"]
+- id: new_future_medical
+  question: What does the 2027 medical policy say?
+  designation: hr
+  category: superseded
+  document: Medical Insurance Policy
+  expected: []
+  answer: true
+- id: new_intern_hotel
+  question: What hotel can I stay in?
+  designation: intern
+  category: intern_blocked
+  document: Travel Policy
+  expected: []
+  answer: true
+- id: new_intern_fuel
+  question: What is my fuel allowance?
+  designation: intern
+  category: intern_blocked
+  document: Travel Policy
+  expected: []
+  answer: true
+- id: new_gm_pf
+  question: Can I take a provident fund loan?
+  designation: general_manager
+  category: plain
+  document: Provident Fund Loan Policy – Head Office
+  expected: []
+  answer: true
+- id: new_store_medical
+  question: Which medical plan applies to me?
+  designation: store_manager
+  category: personal
+  document: Medical Insurance Policy
+  expected: []
+  answer: true
+- id: new_multi
+  question: What is my daily allowance and what is my hotel limit?
+  designation: deputy_general_manager
+  category: multi
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:48"]
+  answer: true
+- id: new_annexure_keep
+  question: Where is the medical benefit schedule?
+  designation: general_manager
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+  answer: true
+- id: new_ceo
+  question: What did the CEO say about trust?
+  designation: employee
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:1"]
+  answer: true
+- id: new_advance_gm
+  question: How do I request an advance salary?
+  designation: general_manager
+  category: plain
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:3"]
+  match: any
+  answer: true
+- id: new_summary
+  question: What fields are on the summary report?
+  designation: hr
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:102"]
+  answer: true
+- id: new_maternity
+  question: Is maternity covered for me?
+  designation: executive
+  category: personal
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:22"]
+  match: any
+  answer: true
+- id: new_leave
+  question: How many sick leaves do I get?
+  designation: manager
+  category: no_answer
+  document: ""
+  expected: []
+  answer: true

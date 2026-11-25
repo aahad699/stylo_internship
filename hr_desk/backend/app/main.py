@@ -57,6 +57,7 @@ from .llm import provider_deadline
 from .models import Employee, PolicyDraft
 from .policy_worker import run_policy_worker
 from .pipeline import Pipeline
+from .guardrails import contains_named_pay
 
 logger = logging.getLogger("hr_desk")
 logging.basicConfig(level=logging.INFO)
@@ -125,8 +126,8 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
                     expired = await asyncio.to_thread(built.store.maintain)
                     for policy_id in expired:
                         await asyncio.to_thread(remove_policy_files, policy_id)
-                except Exception:
-                    logger.exception("Database maintenance failed")
+                except Exception as error:
+                    logger.error("error_class=%s request_id=- status=500", type(error).__name__)
                 await asyncio.sleep(300)
 
         maintenance = asyncio.create_task(maintain())
@@ -149,6 +150,7 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
 def register(app: FastAPI) -> None:
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        request.state.request_id = secrets.token_hex(16)
         content_length = request.headers.get("content-length")
         if content_length and content_length.isdecimal():
             is_upload = request.headers.get("content-type", "").lower().startswith("multipart/form-data")
@@ -159,7 +161,11 @@ def register(app: FastAPI) -> None:
         expected = public_origin()
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and origin and expected and origin != expected:
             return JSONResponse(status_code=403, content={"message": "Open HR Desk from its company address."})
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            _log_request_error(request, error, 500)
+            response = JSONResponse(status_code=500, content={"message": UNAVAILABLE, "answer": UNAVAILABLE})
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
@@ -178,17 +184,12 @@ def register(app: FastAPI) -> None:
             content={"message": "Check the form and try again."},
         )
 
-    @app.exception_handler(Exception)
-    async def unexpected(_request: Request, exc: Exception):
-        logger.exception("Request failed")
-        return JSONResponse(status_code=500, content={"message": UNAVAILABLE, "answer": UNAVAILABLE})
-
     @app.get("/api/health")
     def health(request: Request):
         try:
             request.app.state.store.ping()
         except Exception as exc:
-            logger.exception("Database health check failed")
+            _log_request_error(request, exc, 503)
             raise HTTPException(503, "The database is not available.") from exc
         return {"ok": True}
 
@@ -547,6 +548,26 @@ def register(app: FastAPI) -> None:
             "actions": [_action_row(store, row) for row in store.list_actions()],
         }
 
+    @app.get("/api/questions/{trace_id}/passages")
+    def question_passages(trace_id: str, request: Request):
+        employee = _require_admin(request)
+        store = request.app.state.store
+        trace = store.get_trace(trace_id) if _TRACE_ID.fullmatch(trace_id) else None
+        if not trace:
+            raise HTTPException(404, "Question not found.")
+        ids = list(dict.fromkeys(c.passage_id for c in trace.citations if c.passage_id))
+        audiences = set(allowed_audiences(employee.designation))
+        today = _today(request)
+        passages = store.passages_by_id(ids) if ids else []
+        visible = {
+            p.id: p for p in passages
+            if shares_audience(p.audience, audiences) and visible_passage(employee.designation, p)
+            and p.effective_from <= today and (p.effective_to is None or p.effective_to >= today)
+            and not contains_named_pay(f"{p.title}\n{p.body}")
+        }
+        return {"passages": [{"title": visible[id].title, "label": visible[id].section_label,
+                              "text": visible[id].body} for id in ids if id in visible]}
+
     @app.delete("/api/questions/{trace_id}")
     def remove_question(trace_id: str, request: Request):
         admin = _require_admin(request)
@@ -566,8 +587,12 @@ def register(app: FastAPI) -> None:
 
             return run_screen_checks()
         except Exception as exc:
-            logger.exception("Checks failed to run")
+            _log_request_error(request, exc, 500)
             raise HTTPException(500, UNAVAILABLE) from exc
+
+
+def _log_request_error(request: Request, error: Exception, status: int) -> None:
+    logger.error("error_class=%s request_id=%s status=%d", type(error).__name__, request.state.request_id, status)
 
 
 def _ask_question(request: Request, payload: AskIn, cancelled: Event):
@@ -581,7 +606,7 @@ def _ask_question(request: Request, payload: AskIn, cancelled: Event):
                             (f"ask:{digest(employee.email)}", ASK_LIMIT, ASK_WINDOW_S)], lease=True)
     try:
         with provider_deadline(ASK_DEADLINE_S, cancelled):
-            result = request.app.state.pipeline.ask(employee, payload.question, history)
+            result = request.app.state.pipeline.ask(employee, payload.question, history, request_id=request.state.request_id)
     finally:
         store.release_lease(lease)
     if cancelled.is_set():
@@ -598,6 +623,7 @@ def _ask_question(request: Request, payload: AskIn, cancelled: Event):
                               {"role": "user", "text": payload.question.strip()},
                               {"role": "assistant", "text": result.answer, "citations": citations, "scope": version,
                                "outcome": result.outcome,
+                               "passage_ids": result.passage_ids,
                                "expiresOn": result.valid_until.isoformat() if result.valid_until else None})
     return {"answer": result.answer, "outcome": result.outcome, "citations": []}
 
@@ -664,7 +690,8 @@ def _conversation(request: Request, employee: Employee, key: str, scope: str) ->
             continue
         visible.append({"role": question["role"], "text": question["text"]})
         visible.append({"role": answer["role"], "text": answer["text"],
-                        "citations": answer.get("citations", []), "outcome": answer.get("outcome")})
+                        "citations": answer.get("citations", []), "outcome": answer.get("outcome"),
+                        "passage_ids": answer.get("passage_ids", [])})
     return visible, len(messages) - len(visible)
 
 
@@ -789,8 +816,8 @@ def _end_date(starts: date, ends_on: str) -> date | None:
 def _record(store, employee: Employee, action: str, detail: str) -> None:
     try:
         store.record_action(employee.email, action, detail)
-    except Exception:
-        logger.exception("Could not record the admin action")
+    except Exception as error:
+        logger.error("error_class=%s request_id=- status=500", type(error).__name__)
 
 
 def _action_row(store, row: dict) -> dict:
@@ -865,6 +892,7 @@ def _question_row(trace) -> dict:
         "policy": policy,
         "when": trace.created_at,
         "steps": trace.steps,
+        "has_passages": any(item.passage_id for item in trace.citations),
         "technical": {
             "model": trace.model,
             "tokens_in": trace.tokens_in,

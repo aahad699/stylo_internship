@@ -69,28 +69,48 @@ def token_set(text: str) -> set[str]:
 
 
 def keyword_score(query: str, passage: str) -> float:
-    wanted = token_list(query)
+    wanted = token_set(query)
     if not wanted:
         return 0.0
-    found = token_set(passage)
+    return len(matched_tokens(wanted, passage)) / len(wanted)
+
+
+def matched_tokens(wanted: set[str], text: str) -> set[str]:
+    """The wanted words that the text uses, allowing another word form or a one-letter slip."""
+    found = token_set(text)
+    stems = {_stem(token) for token in found}
     found_by_length: dict[int, list[str]] = {}
     for token in found:
         found_by_length.setdefault(len(token), []).append(token)
-    hits = 0
-    for token in set(wanted):
-        if token in found or _near_token(token, found_by_length):
-            hits += 1
-    return hits / len(set(wanted))
+    return {token for token in wanted
+            if token in found or _stem(token) in stems or _near_token(token, found_by_length)}
+
+
+def _stem(word: str) -> str:
+    """gifts and gift, cancelled and cancellations, accepted and accept share a stem."""
+    for suffix in ("ations", "ation", "ings", "ing", "ions", "ion", "ed", "s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+            return word[: -len(suffix)]
+    return word
 
 
 def _near_token(token: str, found_by_length: dict[int, list[str]]) -> bool:
-    """A one-letter slip such as summart or retial still matches the policy word."""
-    if len(token) < 5:
+    """A one-letter slip such as summart or retial, or swapped letters such as feul, still matches the policy word."""
+    if len(token) < 4:
         return False
+    if len(token) == 4:
+        return any(_swapped(token, other) for other in found_by_length.get(4, []))
     nearby: list[str] = []
     for length in (len(token) - 1, len(token), len(token) + 1):
         nearby.extend(found_by_length.get(length, []))
-    return any(_edit_distance(token, other) <= 1 for other in nearby)
+    return any(_edit_distance(token, other) <= 1 or _swapped(token, other) for other in nearby)
+
+
+def _swapped(left: str, right: str) -> bool:
+    if len(left) != len(right) or left == right:
+        return False
+    diff = [index for index, (a, b) in enumerate(zip(left, right)) if a != b]
+    return len(diff) == 2 and diff[1] == diff[0] + 1 and left[diff[0]] == right[diff[1]] and left[diff[1]] == right[diff[0]]
 
 
 def _edit_distance(left: str, right: str) -> int:

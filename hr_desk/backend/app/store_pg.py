@@ -14,6 +14,13 @@ from .config import SESSION_HOURS, CACHE_MAX_ROWS, CACHE_TTL_MINUTES
 from .operations import PostgresOperations, SCHEMA as OPERATIONS_SCHEMA, complete_policy_job, digest
 from .models import ChunkDraft, Employee, Passage, PolicyDraft, TraceRecord
 
+_REFERENCE_SOURCES = (
+    "Travel Policy - Stylo May-2025.pdf",
+    "Medical Takaful Policy 051124.pdf",
+    "Provident Fund Loan Policy – Head Office.docx",
+    "User Guidelines - Advance Salary (HO - RSC).docx",
+)
+
 _SCHEMA = """
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -192,14 +199,23 @@ class PostgresStore(PostgresOperations):
                 cur.execute("UPDATE policy_chunks SET audience = 'employee,manager,hr,executive' WHERE policy_id = ANY(%s)",
                             (changed_ids,))
                 cur.execute("DELETE FROM answer_cache")
-            # Expand the original library's default audiences, but leave HR's custom audiences intact.
-            cur.execute("""SELECT id, title FROM policies
-                           WHERE source_name IN ('Travel Policy - Stylo May-2025.pdf', 'Medical Takaful Policy 051124.pdf')
-                             AND audience = 'employee,manager,hr,executive' AND previous_id IS NULL""")
-            for policy_id, title in cur.fetchall():
+            # Keep the original library on the audiences its policy text names. An audience
+            # HR chose is in the audit log, and that choice stays.
+            cur.execute("""SELECT p.id, p.title, p.audience FROM policies p
+                           WHERE p.source_name = ANY(%s) AND p.previous_id IS NULL
+                             AND NOT EXISTS (SELECT 1 FROM admin_actions a
+                                             WHERE a.action = 'changed policy access'
+                                               AND left(a.detail, length(p.title) + 1) = p.title || ':')""",
+                        (list(_REFERENCE_SOURCES),))
+            converged = False
+            for policy_id, title, current in cur.fetchall():
                 audience = reference_audience(title)
-                cur.execute("UPDATE policies SET audience = %s WHERE id = %s", (audience, policy_id))
-                cur.execute("UPDATE policy_chunks SET audience = %s WHERE policy_id = %s", (audience, policy_id))
+                if audience != current:
+                    cur.execute("UPDATE policies SET audience = %s WHERE id = %s", (audience, policy_id))
+                    cur.execute("UPDATE policy_chunks SET audience = %s WHERE policy_id = %s", (audience, policy_id))
+                    converged = True
+            if converged:
+                cur.execute("DELETE FROM answer_cache")
 
     def ping(self) -> None:
         with self._lock, self.conn.cursor() as cur:
@@ -298,7 +314,7 @@ class PostgresStore(PostgresOperations):
 
     def delete_session(self, token: str) -> None:
         with self._lock, self.conn.cursor() as cur, self.conn.transaction():
-            cur.execute("DELETE FROM sessions WHERE token = %s", (token,))
+            cur.execute("DELETE FROM sessions WHERE token = %s", (digest(token),))
 
     def create_session(self, email: str) -> str:
         token = secrets.token_urlsafe(32)
@@ -630,14 +646,16 @@ class PostgresStore(PostgresOperations):
                            c.heading_path, c.content_type, c.page, c.image_path, c.polarity, c.allowed_roles
                     FROM policy_chunks c
                     JOIN policies p ON p.id = c.policy_id AND p.published
+                    CROSS JOIN (SELECT replace(plainto_tsquery('english', %s)::text, ' & ', ' | ')::tsquery AS terms) q
                     WHERE string_to_array(c.audience, ',') && %s::text[] AND %s = ANY(c.allowed_roles)
                       AND c.effective_from <= %s
                       AND (LEAST(c.effective_to, p.superseded_on - 1) IS NULL OR LEAST(c.effective_to, p.superseded_on - 1) >= %s)
-                      AND c.search_text @@ plainto_tsquery('english', %s)
+                      AND c.search_text @@ q.terms
                       AND (%s::text[] IS NULL OR c.policy_id = ANY(%s::text[]))
+                    ORDER BY ts_rank(c.search_text, q.terms) DESC, c.id
                     LIMIT %s
                     """,
-                    (vector, audience_list, query_role(audiences), today, today, query, policy_ids, policy_ids, limit),
+                    (vector, query, audience_list, query_role(audiences), today, today, policy_ids, policy_ids, limit),
                 )
                 for row in cur.fetchall():
                     rows[row[0]] = row
@@ -878,7 +896,8 @@ class PostgresStore(PostgresOperations):
 
     def get_trace(self, trace_id: str) -> TraceRecord | None:
         with self._lock, self.conn.cursor() as cur:
-            cur.execute("SELECT payload FROM traces WHERE id = %s", (trace_id,))
+            cur.execute("SELECT payload FROM traces WHERE id = %s AND created_at >= now() - interval '3 months'",
+                        (trace_id,))
             row = cur.fetchone()
         if not row:
             return None
@@ -956,10 +975,11 @@ def _trace_payload(trace: TraceRecord) -> dict:
         "outcome": trace.outcome,
         "answer": trace.answer,
         "citations": [
-            {"label": item.label, "text": item.text, "image": item.image} for item in trace.citations
+            {"label": item.label, "passage_id": item.passage_id, "title": item.title} for item in trace.citations
         ],
         "steps": trace.steps,
         "prompt_version": trace.prompt_version,
+        "passage_ids": trace.passage_ids,
     }
 
 
@@ -990,9 +1010,10 @@ def _trace_from_payload(payload: dict) -> TraceRecord:
         outcome=payload.get("outcome") or "",
         answer=payload.get("answer") or "",
         citations=[
-            Citation(item["label"], item["text"], item.get("image") or "")
+            Citation(item["label"], "", passage_id=item.get("passage_id") or "", title=item.get("title") or "")
             for item in payload.get("citations") or []
         ],
         steps=payload.get("steps") or [],
         prompt_version=payload.get("prompt_version") or "",
+        passage_ids=payload.get("passage_ids") or [],
     )

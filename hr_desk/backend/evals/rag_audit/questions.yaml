@@ -1,0 +1,777 @@
+# Retrieval questions for the indexed library on 2026-11-24.
+# expected: passage ids that should be retrieved. match all means every id.
+# answer: true runs the full answer path on a verified account.
+
+- id: coc_ceo
+  question: message from ceo
+  designation: general_manager
+  category: keyword
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:1"]
+  answer: true
+  must_contain: ["trust"]
+
+- id: coc_ceo_plain
+  question: What did the CEO say in the code of conduct?
+  designation: hr
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:1"]
+
+- id: coc_values
+  question: What are our values?
+  designation: intern
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:5"]
+  answer: true
+  must_contain: ["Innovation"]
+
+- id: coc_ceo_typo
+  question: mesage from the ceo
+  designation: hr
+  category: misspelling
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:1"]
+
+- id: coc_gifts
+  question: Can I accept a gift from a vendor?
+  designation: general_manager
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:9"]
+
+- id: coc_harassment
+  question: What is the harassment rule?
+  designation: intern
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:16"]
+
+- id: coc_social
+  question: What are the social media rules?
+  designation: hr
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:17"]
+
+- id: coc_unsure
+  question: What should I do if I am unsure about the right course of action?
+  designation: intern
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:1", "doc-e50809e1dd67ce54:6"]
+  match: any
+
+- id: cor_dress
+  question: What happens if I breach the dress code?
+  designation: intern
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:89", "doc-6a4e4417299da190:33"]
+  match: any
+  answer: true
+  must_contain: ["warning"]
+
+- id: cor_dress_keyword
+  question: dress code
+  designation: people_specialist
+  category: keyword
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:33", "doc-6a4e4417299da190:89"]
+  match: any
+
+- id: cor_summary
+  question: give me details about summary report
+  designation: hr
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:102"]
+  answer: true
+  must_contain: ["Inquiry officer findings"]
+
+- id: cor_summary_typo
+  question: summart report
+  designation: hr
+  category: misspelling
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:102"]
+
+- id: cor_incident
+  question: What fields are on the incident report?
+  designation: general_manager
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:103"]
+
+- id: cor_verbal
+  question: What is a verbal warning?
+  designation: intern
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:105"]
+
+- id: cor_dismissal
+  question: Which violations can lead to immediate dismissal?
+  designation: hr
+  category: plain
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:39"]
+
+- id: cor_fir
+  question: FIR
+  designation: hr
+  category: keyword
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:102"]
+  match: any
+
+- id: tr_ta
+  question: TA
+  designation: general_manager
+  category: keyword
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:8"]
+  match: any
+  answer: true
+
+- id: tr_da
+  question: daily allowance for me
+  designation: general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:26"]
+  answer: true
+  must_contain: ["300"]
+
+- id: tr_da_alias
+  question: DA for me
+  designation: general_manager
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:26"]
+
+- id: tr_fuel
+  question: fuel allowance for me
+  designation: general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57", "doc-c3ff72f11b544fd9:58", "doc-c3ff72f11b544fd9:53", "doc-c3ff72f11b544fd9:54"]
+  answer: true
+
+- id: tr_mileage
+  question: mileage for me
+  designation: general_manager
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57", "doc-c3ff72f11b544fd9:58"]
+
+- id: tr_hotel
+  question: hotel allowance for me
+  designation: general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:48"]
+  answer: true
+
+- id: tr_lodging
+  question: lodging for me
+  designation: general_manager
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:48"]
+
+- id: tr_approver
+  question: Who approves my travel?
+  designation: general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:8"]
+  answer: true
+
+- id: tr_claim
+  question: What are the fields in the travel claim form?
+  designation: hr
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:45"]
+  answer: true
+  must_contain: ["Employee Code"]
+
+- id: tr_300
+  question: When does the 300 km rule apply?
+  designation: general_manager
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:26"]
+  answer: true
+  must_contain: ["300"]
+
+- id: tr_typo
+  question: travle allowance for me
+  designation: general_manager
+  category: misspelling
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:26"]
+  match: any
+
+- id: tr_accommodation
+  question: Where can I stay on a business trip?
+  designation: general_manager
+  category: alias
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:23", "doc-c3ff72f11b544fd9:48"]
+  match: any
+
+- id: tr_group
+  question: Does group travel count under the travel policy?
+  designation: general_manager
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:3"]
+
+- id: tr_taxi
+  question: Are taxi charges reimbursed?
+  designation: hr
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:22"]
+
+- id: tr_family
+  question: Can my family travel with me on a business trip?
+  designation: hr
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:37"]
+
+- id: tr_cancel
+  question: What if my flight is cancelled?
+  designation: general_manager
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:38"]
+
+- id: med_health
+  question: health insurance for me
+  designation: general_manager
+  category: alias
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+  answer: true
+
+- id: med_insurance
+  question: What is my medical insurance?
+  designation: general_manager
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+
+- id: med_takaful
+  question: What does takaful cover for me?
+  designation: hr
+  category: alias
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:2", "doc-922ff7991e7a9615:21"]
+  match: any
+  answer: true
+
+- id: med_hospital
+  question: What is my hospitalization limit?
+  designation: general_manager
+  category: personal
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+
+- id: med_maternity
+  question: What is the maternity benefit?
+  designation: hr
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:6"]
+  answer: true
+
+- id: med_panel
+  question: How do I claim at a panel hospital?
+  designation: hr
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:9"]
+  answer: true
+
+- id: med_typo
+  question: medcal insurance for me
+  designation: general_manager
+  category: misspelling
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:21"]
+
+- id: med_exclusions
+  question: What does medical insurance not cover?
+  designation: hr
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:26", "doc-922ff7991e7a9615:7"]
+  match: any
+
+- id: med_nonpanel
+  question: How do I claim from a non-panel hospital?
+  designation: hr
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:10"]
+
+- id: pf_how
+  question: How does the provident fund loan work?
+  designation: hr
+  category: plain
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:12", "doc-14908bcf9bf82ed2:13"]
+  match: any
+  answer: true
+
+- id: pf_keyword
+  question: PF loan
+  designation: hr
+  category: keyword
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:13", "doc-14908bcf9bf82ed2:12"]
+  match: any
+  answer: true
+
+- id: pf_typo
+  question: provident fond loan
+  designation: executive
+  category: misspelling
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:12"]
+
+- id: pf_approver
+  question: Who approves a provident fund loan?
+  designation: manager
+  category: plain
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:16", "doc-14908bcf9bf82ed2:15"]
+  match: any
+
+- id: pf_repay
+  question: How is a provident fund loan repaid?
+  designation: employee
+  category: plain
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:14"]
+
+- id: adv_how
+  question: How do I take an advance salary?
+  designation: hr
+  category: plain
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:2", "doc-18997a1a72f05567:3"]
+  match: any
+  answer: true
+
+- id: adv_ess
+  question: How do I open the ESS portal for advance salary?
+  designation: hr
+  category: plain
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:3"]
+
+- id: adv_typo
+  question: advance salry
+  designation: employee
+  category: misspelling
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:2", "doc-18997a1a72f05567:1"]
+  match: any
+
+- id: multi_da_hotel
+  question: daily allowance and hotel for me
+  designation: general_manager
+  category: multi
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:48"]
+  answer: true
+
+- id: multi_dress_travel
+  question: What is the dress code and who approves my travel?
+  designation: hr
+  category: multi
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:89", "doc-c3ff72f11b544fd9:8"]
+  match: any
+  answer: true
+
+- id: multi_med_pf
+  question: medical insurance and provident fund
+  designation: hr
+  category: multi
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:2", "doc-14908bcf9bf82ed2:12"]
+  match: any
+
+- id: multi_three
+  question: fuel for me and hotel for me and daily allowance for me
+  designation: general_manager
+  category: multi
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57", "doc-c3ff72f11b544fd9:48", "doc-c3ff72f11b544fd9:28"]
+
+- id: none_leave
+  question: How many casual leaves do I get?
+  designation: general_manager
+  category: no_answer
+  document: ""
+  expected: []
+  answer: true
+
+- id: none_sick
+  question: What is the sick leave policy?
+  designation: hr
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: none_absence
+  question: What counts as an absence?
+  designation: intern
+  category: alias
+  document: ""
+  expected: []
+
+- id: none_canteen
+  question: What is on the canteen menu?
+  designation: general_manager
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: none_gym
+  question: Where is the office gym?
+  designation: hr
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: none_wfh
+  question: Can I work from home?
+  designation: general_manager
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: none_bonus
+  question: What is the annual bonus policy?
+  designation: hr
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: none_gratuity
+  question: How is gratuity calculated?
+  designation: employee
+  category: no_answer
+  document: ""
+  expected: []
+
+- id: old_travel
+  question: What did the 2023 travel policy say?
+  designation: general_manager
+  category: superseded
+  document: ""
+  expected: []
+  answer: true
+
+- id: old_medical
+  question: Show me the superseded medical policy
+  designation: hr
+  category: superseded
+  document: ""
+  expected: []
+
+- id: future_travel
+  question: What does the 2027 travel policy say?
+  designation: general_manager
+  category: superseded
+  document: ""
+  expected: []
+
+- id: old_conduct
+  question: Show the old code of conduct from 2020
+  designation: intern
+  category: superseded
+  document: ""
+  expected: []
+
+- id: future_advance
+  question: What is the future advance salary policy?
+  designation: hr
+  category: superseded
+  document: ""
+  expected: []
+
+- id: intern_hotel
+  question: hotel allowance for me
+  designation: intern
+  category: intern_blocked
+  document: Travel Policy
+  expected: []
+  answer: true
+
+- id: intern_medical
+  question: health insurance for me
+  designation: intern
+  category: intern_blocked
+  document: Medical Insurance Policy
+  expected: []
+  answer: true
+
+- id: intern_pf
+  question: How does the provident fund loan work?
+  designation: intern
+  category: intern_blocked
+  document: Provident Fund Loan Policy – Head Office
+  expected: []
+
+- id: intern_advance
+  question: How do I take an advance salary?
+  designation: intern
+  category: intern_blocked
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: []
+  answer: true
+
+- id: intern_fuel
+  question: fuel allowance for me
+  designation: intern
+  category: intern_blocked
+  document: Travel Policy
+  expected: []
+
+- id: intern_da
+  question: DA for me
+  designation: intern
+  category: intern_blocked
+  document: Travel Policy
+  expected: []
+
+- id: fu_mileage
+  question: mileage
+  designation: general_manager
+  category: follow_up
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57", "doc-c3ff72f11b544fd9:58"]
+  history:
+    - {role: user, text: "TA"}
+    - {role: assistant, text: "If you mean travel allowance or mileage, I can show the rates for your designation."}
+  answer: true
+
+- id: fu_hotel
+  question: what about hotel
+  designation: general_manager
+  category: follow_up
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:48"]
+  history:
+    - {role: user, text: "What is my daily allowance?"}
+    - {role: assistant, text: "The daily allowance depends on the designation."}
+  answer: true
+
+- id: fu_yes
+  question: "yes"
+  designation: general_manager
+  category: follow_up
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57"]
+  history:
+    - {role: user, text: "TA"}
+    - {role: assistant, text: "If you mean travel allowance or mileage, I can show the rates for your designation."}
+
+- id: fu_recall
+  question: what was my last question?
+  designation: general_manager
+  category: follow_up
+  document: ""
+  expected: []
+  history:
+    - {role: user, text: "Who approves my travel?"}
+    - {role: assistant, text: "Director/COO must approve the request.", passage_ids: ["doc-c3ff72f11b544fd9:8"]}
+  answer: true
+
+- id: fu_why
+  question: why not?
+  designation: intern
+  category: follow_up
+  document: Travel Policy
+  expected: []
+  history:
+    - {role: user, text: "hotel allowance for me"}
+    - {role: assistant, text: "I can't share the travel rates. They apply to permanent management employees, and an internship is outside that group."}
+  answer: true
+
+- id: fu_managers
+  question: and for managers
+  designation: hr
+  category: follow_up
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:89"]
+  match: any
+  history:
+    - {role: user, text: "What happens if I breach the dress code?"}
+    - {role: assistant, text: "A dress code breach is a minor breach. The steps are a verbal warning and then a written warning."}
+
+- id: pers_officer_fuel
+  question: fuel allowance for me
+  designation: officer
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:55", "doc-c3ff72f11b544fd9:53"]
+
+- id: pers_exec_hotel
+  question: hotel allowance for me
+  designation: executive
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:51"]
+
+- id: pers_manager_da
+  question: daily allowance for me
+  designation: manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:30", "doc-c3ff72f11b544fd9:26"]
+
+- id: pers_sm_fuel
+  question: mileage for me
+  designation: senior_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:56", "doc-c3ff72f11b544fd9:53"]
+
+- id: pers_agm_hotel
+  question: lodging for me
+  designation: assistant_general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:49"]
+
+- id: pers_dgm_da
+  question: DA for me
+  designation: deputy_general_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:28", "doc-c3ff72f11b544fd9:26"]
+
+- id: pers_coo_fuel
+  question: fuel allowance for me
+  designation: coo_business
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:59", "doc-c3ff72f11b544fd9:53"]
+
+- id: pers_store_med
+  question: health insurance for me
+  designation: store_manager
+  category: personal
+  document: Medical Insurance Policy
+  expected: []
+
+- id: pers_asm_tour
+  question: What is my tour allowance?
+  designation: area_sales_manager
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:35"]
+
+- id: pers_rsm_tour
+  question: What is the regional sales manager tour allowance?
+  designation: hr
+  category: plain
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:34"]
+
+- id: pers_people_dress
+  question: dress code
+  designation: people_specialist
+  category: personal
+  document: Corrective Action Policy
+  expected: ["doc-6a4e4417299da190:33", "doc-6a4e4417299da190:89"]
+  match: any
+
+- id: pers_dgm_medical
+  question: health insurance for me
+  designation: deputy_general_manager
+  category: personal
+  document: Medical Insurance Policy
+  expected: []
+
+- id: hr_gm_fuel
+  question: fuel allowance for a general manager
+  designation: hr
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:57", "doc-c3ff72f11b544fd9:58"]
+
+- id: hr_sm_hotel
+  question: hotel allowance for a senior manager
+  designation: hr
+  category: personal
+  document: Travel Policy
+  expected: ["doc-c3ff72f11b544fd9:49"]
+
+- id: pers_exec_med
+  question: health insurance for me
+  designation: executive
+  category: personal
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:23"]
+
+- id: pers_officer_med
+  question: medical insurance for me
+  designation: officer
+  category: personal
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:24"]
+
+- id: pers_manager_pf
+  question: provident fund loan for me
+  designation: manager
+  category: personal
+  document: Provident Fund Loan Policy – Head Office
+  expected: ["doc-14908bcf9bf82ed2:12"]
+
+- id: gm_pf_closed
+  question: How does the provident fund loan work?
+  designation: general_manager
+  category: no_answer
+  document: Provident Fund Loan Policy – Head Office
+  expected: []
+
+- id: gm_advance
+  question: How do I open the ESS portal for advance salary?
+  designation: general_manager
+  category: plain
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:3"]
+
+- id: coc_ack
+  question: Where do I sign the code of conduct?
+  designation: intern
+  category: plain
+  document: Code of Conduct
+  expected: ["doc-e50809e1dd67ce54:19", "doc-e50809e1dd67ce54:20"]
+  match: any
+
+- id: med_claim_form
+  question: What documents does the in-patient claim form need?
+  designation: hr
+  category: plain
+  document: Medical Insurance Policy
+  expected: ["doc-922ff7991e7a9615:28"]
+
+- id: adv_approval
+  question: How does a line manager approve an advance salary?
+  designation: manager
+  category: plain
+  document: User Guidelines - Advance Salary (HO - RSC)
+  expected: ["doc-18997a1a72f05567:8", "doc-18997a1a72f05567:11"]
+  match: any

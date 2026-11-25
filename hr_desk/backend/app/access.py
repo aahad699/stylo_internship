@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .textutil import token_set
+from .textutil import _stem, matched_tokens, token_set
 
 ROLE_LABELS = {
     "intern": "Intern",
@@ -64,6 +64,12 @@ _MEDICAL_ROLES = _TRAVEL_ROLES | set("""
 ceo cfo director designer supervisor support_staff other_staff senior_store_manager store_manager
 assistant_store_manager branch_accountant head_hr
 """.split())
+# Store staff work in retail and the Travel Policy calls RSMs and ASMs field-based,
+# so none of them is a Head Office (RSC) employee.
+_HEAD_OFFICE_ROLES = set(ROLE_LABELS) - set("""
+intern trainee salesman senior_store_manager store_manager assistant_store_manager branch_accountant
+regional_sales_manager area_sales_manager
+""".split())
 
 
 def reference_audience(title: str) -> str:
@@ -73,20 +79,29 @@ def reference_audience(title: str) -> str:
     if title.startswith("medical"):
         return pack_audiences(list(_MEDICAL_ROLES | {"employee", "hr"}))
     if title.startswith("provident") or "advance salary" in title:
-        # Job titles alone do not prove permanent Head Office employment.
-        return "employee,manager,hr,executive"
+        return pack_audiences(list(_HEAD_OFFICE_ROLES))
     return "everyone"
 
 
 _LOW_TRAVEL = {"senior_executive", "executive", "officer"}
 _SM_AGM = {"senior_manager", "assistant_general_manager"}
+# Annexure B grade labels. Plan A's "HEAD" and "Higher Management" take in the
+# DGM, the group chief and the head of HR; "Assistant" in Plan B is the assistant
+# manager; "Lower Management" in Plan C is the senior executive.
 _PLANS = {
-    "a": {"coo_business", "director", "ceo", "cfo", "assistant_general_manager", "general_manager"},
-    "b": {"manager", "senior_manager"},
-    "c": {"executive", "designer"},
+    "a": {"coo_business", "director", "ceo", "cfo", "assistant_general_manager", "deputy_general_manager",
+          "general_manager", "group_chief", "head_hr"},
+    "b": {"manager", "assistant_manager", "senior_manager"},
+    "c": {"executive", "senior_executive", "designer"},
     "d": {"officer", "supervisor", "support_staff"},
     "e": {"other_staff"},
 }
+
+
+def has_medical_plan(designation: str) -> bool:
+    return any(designation in roles for roles in _PLANS.values())
+
+
 _LABEL = re.compile(r"(?:^|[.\n]\s*)(?:grade entitlement|grade):\s*([^\.\n]+)", re.I)
 _PLAN = re.compile(r"\bplan\s+([a-e])\b", re.I)
 
@@ -233,7 +248,7 @@ def grade_band(text: str) -> str | None:
     if "all level" in folded or "all grade" in folded:
         return "all"
     for band, markers in _GRADE_BANDS:
-        if any(marker in folded for marker in markers):
+        if any(re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", folded) for marker in markers):
             return band
     return None
 
@@ -262,78 +277,115 @@ _BROAD = {
     "this",
     "that",
     "about",
+    "new",
+    "long",
 }
 
 
 def asks_for_hidden(question: str, passages) -> bool:
     """A role refusal needs the question to actually name the closed passage.
 
-    A word in the title or heading is enough. A single ordinary word that only
-    appears in the body, such as password, is not.
+    A substantive word in the title or heading is enough. Body matches need
+    two distinct words (allowing inflections, but not fuzzy spelling matches).
     """
     words = {word for word in token_set(question) if len(word) >= 3 and word not in _BROAD}
     if not words:
         return False
     for passage in passages:
-        title = token_set(f"{getattr(passage, 'title', '')} {getattr(passage, 'heading', '')}")
-        if words & title:
+        if matched_tokens(words, f"{getattr(passage, 'title', '')} {getattr(passage, 'heading', '')}"):
             return True
-        body = token_set(getattr(passage, "body", ""))
-        if len(words & body) >= 2:
+        body_stems = {_stem(word) for word in token_set(getattr(passage, "body", ""))}
+        if len({_stem(word) for word in words} & body_stems) >= 2:
             return True
     return False
 
 
+# Grade names as the policy rows and annexures write them. Combined row labels
+# come first so "SM / AGM" reads as one row, not as two separate grades.
+_GRADE_NAMES = [
+    (r"se\s*(?:&|and)\s*below", _LOW_TRAVEL),
+    (r"sm\s*/\s*agm", _SM_AGM),
+    (r"am\s*(?:&|and)\s*m", {"assistant_manager", "manager"}),
+    (r"dgm\s+to\s+gm", {"deputy_general_manager", "general_manager"}),
+    (r"(?:coo\s*/\s*gc|gc\s*/\s*coo)", {"coo_business", "group_chief"}),
+    *sorted(
+        ((re.escape(label.casefold()), {role}) for role, label in ROLE_LABELS.items() if role not in {"employee", "hr"}),
+        key=lambda item: -len(item[0]),
+    ),
+    (r"salesmen", {"salesman"}),
+    (r"coo", {"coo_business"}),
+    *((name, {role}) for name, role in (
+        ("dgm", "deputy_general_manager"), ("agm", "assistant_general_manager"), ("gm", "general_manager"),
+        ("gc", "group_chief"), ("rsm", "regional_sales_manager"), ("asm", "area_sales_manager"),
+    )),
+]
+# Two-letter grades that are also ordinary words ("I am") count only in capitals.
+_CAPITAL_GRADES = [("AM", {"assistant_manager"}), ("SM", {"senior_manager"}), ("SE", {"senior_executive"})]
+_PLURAL = r"(?:s|es)?(?:'s|’s|'|’)?(?!\w)"
+
+
+def named_grades(question: str) -> set[str]:
+    """Designations a question names, read longest name first."""
+    text = question or ""
+    found: set[str] = set()
+    for names, flags in ((_GRADE_NAMES, re.I), (_CAPITAL_GRADES, 0)):
+        for name, roles in names:
+            pattern = re.compile(rf"\b{name}{_PLURAL}", flags)
+            if pattern.search(text):
+                found |= roles
+                text = pattern.sub(" ", text)
+    return found
+
+
 def names_other_grade(designation: str, question: str) -> bool:
-    """The question names a grade row this role does not see."""
-    if designation not in {"employee", "manager"}:
+    """The question names a grade, and the asker is not in it."""
+    if designation == "hr":
         return False
+    named = named_grades(question)
+    if named:
+        return designation not in named
     band = grade_band(question)
-    return bool(band and band != "all" and band != designation)
+    return designation in {"employee", "manager", "intern", "trainee"} and band not in {None, "all", designation}
 
 
 def role_reason(designation: str, passages) -> str:
     """Why this role stops here. The hidden text itself stays out of the answer."""
-    titles: list[str] = []
+    by_title: dict[str, object] = {}
     for passage in passages:
         title = getattr(passage, "title", "") or ""
-        if title and title not in titles:
-            titles.append(title)
-    if not titles:
+        if title:
+            by_title.setdefault(title, passage)
+    if not by_title:
         return "I can't share that. It sits outside your role."
     reasons = []
-    for title in titles:
-        reason = _boundary(designation, title)
+    for title, passage in by_title.items():
+        outside = not shares_audience(getattr(passage, "audience", "everyone"), set(allowed_audiences(designation)))
+        reason = _boundary(designation, title, outside)
         if reason not in reasons:
             reasons.append(reason)
     return " ".join(reasons)
 
 
-def _boundary(designation: str, title: str) -> str:
+_POLICY_SCOPES = (
+    ("travel", "the travel rules. That policy applies to permanent management employees"),
+    ("medical", "the medical cover. That policy applies to permanent management employees"),
+    ("provident", "the provident fund rules. They apply to permanent Head Office employees"),
+    ("advance", "the advance-salary steps. They apply to permanent Head Office employees"),
+)
+
+
+def _boundary(designation: str, title: str, outside_audience: bool) -> str:
+    """outside_audience: the policy itself is closed to this role, not just a grade row."""
+    if designation != "intern" and not outside_audience:
+        return "I can't share that. It is written for a different grade, and your role doesn't include that grade."
     folded = title.lower()
-    if designation == "intern" and "travel" in folded:
-        return (
-            "I can't share the travel rules. That policy applies to permanent management employees, "
-            "and an internship is outside that group."
-        )
-    if designation == "intern" and "medical" in folded:
-        return (
-            "I can't share the medical cover. That policy applies to permanent management employees, "
-            "and an internship is outside that group."
-        )
-    if designation == "intern" and "provident" in folded:
-        return (
-            "I can't share the provident fund rules. They apply to permanent Head Office employees, "
-            "and an internship is outside that group."
-        )
-    if designation == "intern" and ("advance" in folded or "salary" in folded):
-        return (
-            "I can't share the advance-salary steps. They apply to permanent Head Office employees, "
-            "and an internship is outside that group."
-        )
+    who = "an internship" if designation == "intern" else f"the {role_label(designation)} designation"
+    for marker, scope in _POLICY_SCOPES:
+        if marker in folded:
+            return f"I can't share {scope}, and {who} is outside that group."
     if designation == "intern":
         return "I can't share that. An internship doesn't include this policy."
-    return "I can't share that. It is written for a different grade, and your role doesn't include that grade."
+    return f"I can't share that. The {title} isn't open to the {role_label(designation)} designation. Ask HR if it should be."
 
 
 def can_see_passage(

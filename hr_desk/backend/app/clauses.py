@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
+from .textutil import STOP
+
 _CLAUSE = re.compile(r"(?<!\d)(?<!\d\.)(\d+(?:\.\d+)+)\b")
 _TITLE_SKIP = {"policy", "policies", "head", "office", "guidelines", "user", "action"}
 
@@ -15,6 +17,9 @@ _PHRASE_SKIP = _TITLE_SKIP | {
     "short", "brief", "summary", "point", "points", "section", "clause",
     "heading", "explain", "describe", "mean", "means",
 }
+_NAME_SKIP = _PHRASE_SKIP | STOP | {"say", "says", "said", "under", "all", "any"}
+_HEADING_LABEL = re.compile(r"^(?:annexure\s+[a-z](?:\s*-\s*\d+)?|\d+(?:\.\d+)*)\.?\s*[:\-–]?\s*")
+_PAGE_MARK = re.compile(r"(?i)page\s+\d+\s+of\s+\d+$")
 
 
 def heading_has_phrase(heading: str, phrase: str) -> bool:
@@ -34,8 +39,44 @@ def heading_sql_pattern(phrase: str) -> str:
     return r"\m" + r"\M.*\m".join(re.escape(part) for part in parts) + r"\M"
 
 
+def _title_words(text: str) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return [word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+            for word in words if word not in _NAME_SKIP and len(word) > 1]
+
+
+def heading_naming(question: str, heading: str, heading_path: str = "", document: str = "") -> tuple[bool, int]:
+    """(whole title named, title words shared) for this heading or a parent heading. (False, 0): not named.
+
+    Words of the document title, such as provident fund, name no heading inside that document. The whole
+    title is named when the question has its other title words in a row and they are at least half of the
+    question, or the annexure label. "Who prepares the incident report for a salesman's case" only names part
+    of Incident Report. A one-word title such as Gifts counts only when the question has no other words. Two
+    title words next to each other in both, such as "tour allowance" for Daily Tour Allowance, name part.
+    """
+    document_words = set(_title_words(document))
+    asked = [word for word in _title_words(question) if word not in document_words]
+    text = (question or "").lower()
+    best = (False, 0)
+    for annexure in re.findall(r"annexure\s+[a-z0-9]+", text):
+        if re.search(rf"\b{re.escape(annexure)}\b", f"{heading}\n{heading_path}".lower()):
+            best = (True, len(asked) + 1)
+    asked_pairs = set(zip(asked, asked[1:]))
+    for title in {heading, *(heading_path or "").split(" > ")}:
+        title = title.strip()
+        if _PAGE_MARK.match(title):
+            continue
+        core = [word for word in _title_words(_HEADING_LABEL.sub("", title.lower())) if word not in document_words]
+        in_a_row = any(asked[start:start + len(core)] == core for start in range(len(asked)))
+        if core and in_a_row and 2 * len(core) >= len(set(asked)) and (len(core) > 1 or asked == core):
+            best = max(best, (True, len(core)))
+        elif asked_pairs & set(zip(core, core[1:])):
+            best = max(best, (False, len(set(core) & set(asked))))
+    return best
+
+
 def heading_phrases(question: str) -> list[str]:
-    """Printed titles the question names, such as Annexure C or KM Coverage."""
+    """Word pairs that may start a printed title, such as Annexure C or KM Coverage. Used to fetch candidates."""
     text = (question or "").lower()
     phrases: list[str] = []
     for match in re.finditer(r"annexure\s+[a-z0-9]+", text):

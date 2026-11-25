@@ -59,7 +59,9 @@ export default function SignInPage() {
   return (
     <section className="stack auth">
       <header className="page-head">
+        <span className="eyebrow">WELCOME TO HR DESK</span>
         <h1>Sign in</h1>
+        <p className="lead">Your policies, questions, and answers in one place.</p>
       </header>
       <form className="panel" noValidate onSubmit={(event) => void submit(event)}>
         <div className="field">

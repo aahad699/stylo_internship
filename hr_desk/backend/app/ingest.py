@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
+from .aliases import embed_input
 from .config import DATA_ROOT
 from .models import ChunkDraft, PolicyDraft
 
@@ -66,7 +67,7 @@ def make_chunks(policy: PolicyDraft) -> list[ChunkDraft]:
     for heading, text in _sections(policy.body):
         label = f"{policy.title}, {heading}" if heading else policy.title
         for piece in _split_section(text):
-            embed_text = "\n".join(part for part in (policy.title[:200], heading[:600], piece) if part)
+            embed_text = embed_input(policy.title[:200], heading[:600], heading, piece)
             chunks.append(
                 ChunkDraft(
                     section_label=label,

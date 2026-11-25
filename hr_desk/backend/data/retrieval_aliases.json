@@ -1,0 +1,113 @@
+{
+  "note": "Alias table stored with the policy data. topics.py loads this file. Leave and absence are not listed: no leave policy is in the corpus.",
+  "groups": [
+    {
+      "id": "medical",
+      "match": "medical insurance|medical takaful|takaful",
+      "means": "medical insurance",
+      "aliases": [
+        {"phrase": "medical insurance", "source": "indexed title: Medical Insurance Policy"},
+        {"phrase": "health insurance", "source": "judgment"},
+        {"phrase": "medical cover", "source": "judgment"},
+        {"phrase": "hospitalization", "source": "judgment; medical headings use hospitalization and in-patient"},
+        {"phrase": "takaful", "source": "source filename: Medical Takaful Policy 051124.pdf"},
+        {"phrase": "medical", "source": "user request: \"medical\" alone means the Medical Insurance Policy"},
+        {"phrase": "health", "source": "user request: \"health policy\" means the Medical Insurance Policy"}
+      ]
+    },
+    {
+      "id": "daily",
+      "match": "daily allowance",
+      "means": "daily allowance",
+      "replace": {"da": "daily allowance"},
+      "aliases": [
+        {"phrase": "daily allowance", "source": "heading: 6. Daily Allowance"},
+        {"phrase": "da", "source": "judgment; the heading spells the words out"}
+      ]
+    },
+    {
+      "id": "travel_approval",
+      "match": "travel approval|authorization of travel|travel policy",
+      "means": "travel approval",
+      "replace": {"ta": "travel approval"},
+      "aliases": [
+        {"phrase": "travel approval", "source": "heading: Authorization of Travel"},
+        {"phrase": "ta", "source": "judgment; also used for travel allowance"}
+      ]
+    },
+    {
+      "id": "travel_allowance",
+      "match": "travel allowance|daily allowance|tour allowance",
+      "means": "travel allowance",
+      "aliases": [
+        {"phrase": "travel allowance", "source": "judgment; TA is used for this as well as travel approval"},
+        {"phrase": "ta", "source": "judgment"}
+      ]
+    },
+    {
+      "id": "tour",
+      "match": "tour allowance|daily tour",
+      "means": "daily tour allowance",
+      "aliases": [
+        {"phrase": "daily tour allowance", "source": "heading: 7. Daily Tour Allowance for Field-Based Employees"},
+        {"phrase": "tour allowance", "source": "heading: 7. Daily Tour Allowance for Field-Based Employees"}
+      ]
+    },
+    {
+      "id": "hotel",
+      "match": "hotel entitlement|accommodation",
+      "means": "hotel",
+      "aliases": [
+        {"phrase": "hotel", "source": "heading: Hotel Entitlement"},
+        {"phrase": "lodging", "source": "judgment"}
+      ]
+    },
+    {
+      "id": "fuel",
+      "match": "fuel entitlement|mileage",
+      "means": "fuel",
+      "aliases": [
+        {"phrase": "fuel", "source": "heading: Annexure D: Fuel Entitlement List"},
+        {"phrase": "mileage", "source": "table heading text: Mileage (KM Coverage)"}
+      ]
+    },
+    {
+      "id": "fir",
+      "match": "summary report|first investigation|corrective action",
+      "means": "first investigation report",
+      "replace": {"fir": "first investigation report"},
+      "aliases": [
+        {"phrase": "first investigation report", "source": "judgment; the form heading is Summary Report"},
+        {"phrase": "fir", "source": "judgment"}
+      ]
+    },
+    {
+      "id": "provident",
+      "match": "provident fund",
+      "means": "provident fund",
+      "replace": {"pf": "provident fund"},
+      "aliases": [
+        {"phrase": "provident fund", "source": "indexed title: Provident Fund Loan Policy"},
+        {"phrase": "pf", "source": "judgment"}
+      ]
+    },
+    {
+      "id": "advocate",
+      "match": "advocate",
+      "means": "advocate",
+      "aliases": [
+        {"phrase": "advocate", "source": "Corrective Action Policy 6.6: no advocate can legally assist a workman during the inquiry"},
+        {"phrase": "lawyer", "source": "judgment; everyday word for advocate"}
+      ]
+    },
+    {
+      "id": "outstanding",
+      "match": "outstanding pf loan",
+      "means": "outstanding",
+      "aliases": [
+        {"phrase": "outstanding", "source": "Provident Fund Loan Policy 4.3: any outstanding PF Loan must be fully settled"},
+        {"phrase": "unpaid", "source": "judgment; everyday word for an outstanding loan"}
+      ]
+    }
+  ]
+}
