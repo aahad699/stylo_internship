@@ -14,7 +14,7 @@ const ADMIN_LINKS = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { loading, me, signOut } = useSession();
-  const links = me ? [{ href: "/", label: "Ask HR" }, ...(me.isAdmin ? ADMIN_LINKS : [])] : [];
+  const links = me ? [{ href: "/", label: "New Chat" }, ...(me.isAdmin ? ADMIN_LINKS : [])] : [];
 
   return (
     <>
