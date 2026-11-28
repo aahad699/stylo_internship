@@ -108,6 +108,33 @@
         {"phrase": "outstanding", "source": "Provident Fund Loan Policy 4.3: any outstanding PF Loan must be fully settled"},
         {"phrase": "unpaid", "source": "judgment; everyday word for an outstanding loan"}
       ]
+    },
+    {
+      "id": "bribery",
+      "match": "bribery|facilitation payment|kickback",
+      "means": "bribery",
+      "aliases": [
+        {"phrase": "bribery", "source": "Code of Conduct: offering or promising a payment is a violation even if it is not completed"},
+        {"phrase": "speed up", "source": "judgment; an employee asking about a payment to speed up a government decision"}
+      ]
+    },
+    {
+      "id": "loss_of_business",
+      "match": "loss of business|penalize",
+      "means": "loss of business",
+      "aliases": [
+        {"phrase": "loss of business", "source": "Code of Conduct: employees are not held accountable for a loss of business from following the code"},
+        {"phrase": "lost business", "source": "judgment; everyday wording of loss of business"}
+      ]
+    },
+    {
+      "id": "mass_media",
+      "match": "mass media|confidential",
+      "means": "mass media",
+      "aliases": [
+        {"phrase": "mass media", "source": "Corrective Action Policy: unauthorized disclosure includes contact with mass media"},
+        {"phrase": "newspaper", "source": "judgment; everyday word for mass media"}
+      ]
     }
   ]
 }

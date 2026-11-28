@@ -29,6 +29,7 @@ TIMEOUT_CLASSIFIER_S = 8.0
 TIMEOUT_ANSWER_S = 20.0
 TIMEOUT_MODERATION_S = 8.0
 CACHE_TTL_MINUTES = 60
+CACHE_SIMILARITY = 0.94
 CACHE_MAX_ROWS = 1000
 CHAT_RETENTION_DAYS = 30
 CHAT_MAX_MESSAGES = 40
@@ -66,7 +67,7 @@ def model_nano() -> str:
 
 
 def model_mini() -> str:
-    return os.environ.get("HR_DESK_MODEL_MINI", "gpt-5-mini").strip() or "gpt-5-mini"
+    return os.environ.get("HR_DESK_MODEL_MINI", "gpt-6-luna").strip() or "gpt-6-luna"
 
 
 def embed_model() -> str:

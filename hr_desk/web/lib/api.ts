@@ -4,6 +4,7 @@ export type Person = {
   designation: string;
   role: string;
   isAdmin: boolean;
+  place?: string;
 };
 
 export type Citation = {
@@ -16,6 +17,7 @@ export type AskResponse = {
   answer: string;
   outcome: string;
   citations: Citation[];
+  at?: string;
 };
 
 export type PolicyRow = {
@@ -60,6 +62,11 @@ export type EmployeeRow = {
   role: string;
   isAdmin: boolean;
   hasPassword: boolean;
+  employeeType: "head_office" | "retail";
+  place: string;
+  isPermanent: boolean;
+  medicalPlan: string;
+  joinedOn: string;
 };
 
 export type AdminAction = {
@@ -74,6 +81,8 @@ export type QuestionRow = {
   id: string;
   question: string;
   asked_by: string;
+  email: string;
+  answer: string;
   outcome_label: string;
   policy: string;
   when: string;
@@ -118,6 +127,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(data.message || "Something went wrong. Try again.");
   }
   return data as T;
+}
+
+export function formatLoggedAt(iso: string): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return iso;
+  return then.toLocaleString();
 }
 
 export function formatWhen(iso: string): string {

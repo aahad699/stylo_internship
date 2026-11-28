@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { useSession } from "@/components/session";
 import { api, type PolicyRow, type PolicyDraft, type PolicyJob } from "@/lib/api";
 
+import { ThemeSelect } from "@/components/theme-select";
 import { AUDIENCES } from "@/lib/policy-roles";
 
 function toggleRole(current: string[], role: string): string[] {
@@ -15,19 +16,27 @@ function toggleRole(current: string[], role: string): string[] {
   return next;
 }
 
+function dateLabel(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function RoleChecks({
   selected,
   onChange,
   labelledBy,
+  className,
 }: {
   selected: string[];
   onChange: (roles: string[]) => void;
   labelledBy?: string;
+  className?: string;
 }) {
   return (
-    <div className="checks" role="group" aria-labelledby={labelledBy}>
+    <div className={`checks${className ? ` ${className}` : ""}`} role="group" aria-labelledby={labelledBy}>
       {AUDIENCES.map(([value, label]) => (
-        <label key={value}>
+        <label key={value} className={value === "everyone" ? "is-everyone" : undefined}>
           <input
             type="checkbox"
             checked={selected.includes(value)}
@@ -72,6 +81,9 @@ export function PoliciesScreen() {
   const [accessStarts, setAccessStarts] = useState("");
   const [accessEnds, setAccessEnds] = useState("");
   const [fileKey, setFileKey] = useState(0);
+  const [policyQuery, setPolicyQuery] = useState("");
+  const [policyStatus, setPolicyStatus] = useState("All");
+  const [policyWho, setPolicyWho] = useState("All");
 
   const refreshLibrary = useCallback(async () => {
     const [library, review] = await Promise.all([
@@ -113,6 +125,20 @@ export function PoliciesScreen() {
   useEffect(() => {
     if (adding || replacing) document.getElementById(titleId)?.focus();
   }, [adding, replacing, titleId]);
+
+  const policyAudiences = Array.from(new Set(
+    (policies ?? []).flatMap((policy) => policy.who.replace(/\.$/, "").split(",").map((item) => item.trim()).filter(Boolean)),
+  )).sort((left, right) => left.localeCompare(right));
+  const visiblePolicies = (policies ?? []).filter((policy) => {
+    const query = policyQuery.trim().toLowerCase();
+    const who = policy.who.replace(/\.$/, "");
+    const haystack = `${policy.title} ${policy.filename || "Pasted text"} ${who}`.toLowerCase();
+    const audienceOk = policyWho === "All" || who.split(",").map((item) => item.trim()).includes(policyWho);
+    return (!query || haystack.includes(query))
+      && (policyStatus === "All" || policy.status === policyStatus)
+      && audienceOk;
+  });
+  const policyFiltersOn = policyQuery.trim() !== "" || policyStatus !== "All" || policyWho !== "All";
 
   if (!me) {
     return (
@@ -392,18 +418,62 @@ export function PoliciesScreen() {
       ) : policies.length === 0 ? (
         <p className="empty-state">No policies added yet.</p>
       ) : (
-        <ul className="plain-list">
-          {policies.map((policy) => (
+        <>
+        <div className="list-filters">
+          <label>
+            Search
+            <input
+              type="search"
+              value={policyQuery}
+              placeholder="Title, file, or who can see it"
+              onChange={(event) => setPolicyQuery(event.target.value)}
+            />
+          </label>
+          <label>
+            Status
+            <ThemeSelect
+              value={policyStatus}
+              onChange={setPolicyStatus}
+              options={["All", "Active", "Scheduled", "Expired", "Replaced"].map((status) => ({ value: status, label: status }))}
+            />
+          </label>
+          <label>
+            Who can see it
+            <ThemeSelect
+              value={policyWho}
+              onChange={setPolicyWho}
+              options={[{ value: "All", label: "All" }, ...policyAudiences.map((audience) => ({ value: audience, label: audience }))]}
+            />
+          </label>
+          {policyFiltersOn ? (
+            <button type="button" className="clear-filters" onClick={() => {
+              setPolicyQuery("");
+              setPolicyStatus("All");
+              setPolicyWho("All");
+            }}>Clear filters</button>
+          ) : null}
+        </div>
+        <p className="list-filter-count">
+          {visiblePolicies.length === policies.length
+            ? `${policies.length} ${policies.length === 1 ? "policy" : "policies"}`
+            : `${visiblePolicies.length} of ${policies.length} policies`}
+        </p>
+        {visiblePolicies.length === 0 ? (
+          <p className="empty-state">No policies match.</p>
+        ) : (
+        <ul className="plain-list policy-list">
+          {visiblePolicies.map((policy) => (
             <li key={policy.id}>
               <strong>{policy.title}</strong>
-              <span className="file-name">{policy.filename || "Pasted text"}</span>
-              <span className={policy.status === "Active" ? "badge ok" : "badge"}>{policy.status}</span>
-              {policy.replacementStartsOn && policy.status !== "Replaced"
-                ? <span>Replacement starts {policy.replacementStartsOn}.</span> : null}
-              <span>
-                {policy.who}. Starts {policy.starts_on}.
-                {policy.ends_on ? ` Ends ${policy.ends_on}.` : ""}
-              </span>
+              <span className="file-name">File: {policy.filename || "Pasted text"}</span>
+              <div className="policy-facts">
+                <span className={policy.status === "Active" ? "is-active" : ""}>{policy.status}</span>
+                <span>{policy.who.replace(/\.$/, "")}</span>
+                <span>Starts {dateLabel(policy.starts_on)}</span>
+                {policy.ends_on ? <span>Ends {dateLabel(policy.ends_on)}</span> : null}
+                {policy.replacementStartsOn && policy.status !== "Replaced"
+                  ? <span>New version starts {dateLabel(policy.replacementStartsOn)}</span> : null}
+              </div>
               {policy.canRollback ? (
                 pendingRestore === policy.id ? <div className="actions">
                   <span>Restore the earlier version and its access settings?</span>
@@ -414,28 +484,41 @@ export function PoliciesScreen() {
                   onClick={() => setPendingRestore(policy.id)}>Restore earlier version</button>
               ) : null}
               {policy.status === "Replaced" ? null : accessFor === policy.id ? (
-                <div className="row-actions">
-                  <span id={`who-${policy.id}`}>Who can see it</span>
-                  <RoleChecks
-                    selected={accessAudiences}
-                    labelledBy={`who-${policy.id}`}
-                    onChange={setAccessAudiences}
-                  />
-                  <label htmlFor={`start-${policy.id}`}>Starts on</label>
-                  <input
-                    id={`start-${policy.id}`}
-                    type="date"
-                    value={accessStarts}
-                    onChange={(event) => setAccessStarts(event.target.value)}
-                  />
-                  <label htmlFor={`end-${policy.id}`}>Ends on <small>(optional)</small></label>
-                  <input
-                    id={`end-${policy.id}`}
-                    type="date"
-                    value={accessEnds}
-                    onChange={(event) => setAccessEnds(event.target.value)}
-                  />
-                  {accessAudiences.length === 0 ? <p className="help">Choose at least one role.</p> : null}
+                <div className="policy-access">
+                  <div className="field">
+                    <span className="field-label" id={`who-${policy.id}`}>Who can see this policy</span>
+                    <p className="person-hint">Tick Everyone, or tick only the job titles that should see it.</p>
+                    <RoleChecks
+                      className="role-grid"
+                      selected={accessAudiences}
+                      labelledBy={`who-${policy.id}`}
+                      onChange={setAccessAudiences}
+                    />
+                    {accessAudiences.length === 0 ? <p className="person-hint">Choose at least one.</p> : null}
+                  </div>
+                  <div className="field-pair">
+                    <div className="field">
+                      <label htmlFor={`start-${policy.id}`}>Starts on</label>
+                      <input
+                        id={`start-${policy.id}`}
+                        type="date"
+                        value={accessStarts}
+                        onChange={(event) => setAccessStarts(event.target.value)}
+                      />
+                      <p className="person-hint">Answers use this policy from this day.</p>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`end-${policy.id}`}>Ends on</label>
+                      <input
+                        id={`end-${policy.id}`}
+                        type="date"
+                        value={accessEnds}
+                        onChange={(event) => setAccessEnds(event.target.value)}
+                      />
+                      <p className="person-hint">Leave this empty if the policy does not end.</p>
+                    </div>
+                  </div>
+                  <div className="person-edit-actions">
                   <button
                     type="button"
                     className="primary"
@@ -464,11 +547,12 @@ export function PoliciesScreen() {
                         .finally(() => setBusy(false));
                     }}
                   >
-                    Save access
+                    Save
                   </button>
                   <button type="button" disabled={busy} onClick={() => setAccessFor(null)}>
                     Cancel
                   </button>
+                  </div>
                 </div>
               ) : pendingDelete === policy.id ? (
                 <div className="row-actions">
@@ -516,7 +600,7 @@ export function PoliciesScreen() {
                       setMessage("");
                     }}
                   >
-                    Change access
+                    Who can see it
                   </button>
                   <button
                     type="button"
@@ -536,7 +620,7 @@ export function PoliciesScreen() {
                       setMessage("");
                     }}
                   >
-                    Replace
+                    Replace policy
                   </button>
                   <button
                     type="button"
@@ -555,6 +639,8 @@ export function PoliciesScreen() {
             </li>
           ))}
         </ul>
+        )}
+        </>
       )}
     </section>
   );

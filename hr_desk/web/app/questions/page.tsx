@@ -1,5 +1,5 @@
-import { QuestionsScreen } from "@/components/questions-screen";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <QuestionsScreen />;
+  redirect("/logs");
 }

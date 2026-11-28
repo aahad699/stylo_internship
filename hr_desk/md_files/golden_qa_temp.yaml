@@ -1,0 +1,620 @@
+# Temporary golden set. Ground truth is taken from the indexed policy passages.
+# Follow-ups carry the previous question so the dry run can use the same context the chat uses.
+# This file is for testing. It is not a published policy.
+
+- id: adv_01
+  document: Advance Salary
+  designation: officer
+  question: How do I apply for an advance salary now?
+  expected: ["doc-18997a1a72f05567:1"]
+  ground_truth: Apply through the ESS portal. The workflow replaces manual requests, and manual requests are no longer accepted.
+- id: adv_02
+  document: Advance Salary
+  designation: officer
+  question: What is the most I can take as an advance salary?
+  expected: ["doc-18997a1a72f05567:2"]
+  ground_truth: Maximum 50 percent of gross salary.
+- id: adv_03
+  document: Advance Salary
+  designation: officer
+  question: On which dates of the month can I apply for advance salary?
+  expected: ["doc-18997a1a72f05567:2"]
+  ground_truth: The application window is the 15th to the 25th of the month.
+- id: adv_04
+  document: Advance Salary
+  designation: officer
+  question: And if I try on the 10th?
+  history_question: On which dates of the month can I apply for advance salary?
+  expected: ["doc-18997a1a72f05567:2"]
+  ground_truth: The window is only the 15th to the 25th, so the 10th is outside it.
+- id: adv_05
+  document: Advance Salary
+  designation: officer
+  question: What username do I use for the ESS portal?
+  expected: ["doc-18997a1a72f05567:3"]
+  ground_truth: Username is ess followed by the employee code. The password comes from HR or IT. The portal is http://ess.stylo.pk/Default.aspx.
+- id: adv_06
+  document: Advance Salary
+  designation: officer
+  question: Where in ESS do I start an advance request?
+  expected: ["doc-18997a1a72f05567:4"]
+  ground_truth: From the left menu, open Payroll, then Employee Advances and Loans.
+- id: adv_07
+  document: Advance Salary
+  designation: officer
+  question: What happens if I only click Create on an advance salary request?
+  expected: ["doc-18997a1a72f05567:6"]
+  ground_truth: Create saves a draft only. It is not sent for approval unless Create and Submit is selected.
+- id: adv_08
+  document: Advance Salary
+  designation: officer
+  question: So which button actually sends it to my manager?
+  history_question: What happens if I only click Create on an advance salary request?
+  expected: ["doc-18997a1a72f05567:6"]
+  ground_truth: Create and Submit sends it for approval.
+- id: adv_09
+  document: Advance Salary
+  designation: officer
+  question: Can my line manager submit an advance salary for me if I cannot open ESS?
+  expected: ["doc-18997a1a72f05567:6"]
+  ground_truth: Yes, for a Head Office RSC employee without ESS access. The same line manager then approves it, and the normal workflow continues.
+- id: adv_10
+  document: Advance Salary
+  designation: officer
+  question: After my manager approves the advance, who pays it and how is it recovered?
+  expected: ["doc-18997a1a72f05567:11"]
+  ground_truth: It goes to HR. HR processes payment through JBN to Accounts. The amount is deducted from the monthly salary.
+- id: adv_11
+  document: Advance Salary
+  designation: officer
+  question: What happens if my line manager rejects the advance?
+  expected: ["doc-18997a1a72f05567:12"]
+  ground_truth: The request returns to the employee and no further processing occurs.
+- id: adv_12
+  document: Advance Salary
+  designation: officer
+  question: What does Request Change mean on an advance?
+  expected: ["doc-18997a1a72f05567:13"]
+  ground_truth: It is returned for correction. After the update, the employee must submit it again.
+- id: adv_13
+  document: Advance Salary
+  designation: officer
+  question: Can I still send a paper advance salary request to HR?
+  expected: ["doc-18997a1a72f05567:14"]
+  ground_truth: No. All requests must go through ESS. Manual requests are not entertained, and HR processes only system-approved requests.
+- id: adv_14
+  document: Advance Salary
+  designation: officer
+  question: How do I know my advance is waiting for approval?
+  expected: ["doc-18997a1a72f05567:7"]
+  ground_truth: The status on the right of the screen changes to Pending Approval.
+- id: adv_15
+  document: Advance Salary
+  designation: manager
+  question: Where does a line manager review a pending advance salary?
+  expected: ["doc-18997a1a72f05567:9"]
+  ground_truth: In MS Dynamics D365, under work items assigned to them. They also get an Outlook email.
+- id: adv_16
+  document: Advance Salary
+  designation: manager
+  question: What three actions can the manager take?
+  history_question: Where does a line manager review a pending advance salary?
+  expected: ["doc-18997a1a72f05567:10"]
+  ground_truth: Approve, reject, or request a change.
+
+- id: pf_01
+  document: Provident Fund
+  designation: officer
+  question: Who can use the provident fund loan policy?
+  expected: ["doc-14908bcf9bf82ed2:10", "doc-14908bcf9bf82ed2:7"]
+  match: any
+  ground_truth: Permanent Head Office RSC employees only.
+- id: pf_02
+  document: Provident Fund
+  designation: officer
+  question: How long do I have to work here before I can apply for a provident fund loan?
+  expected: ["doc-14908bcf9bf82ed2:12"]
+  ground_truth: At least nine months of continuous service.
+- id: pf_03
+  document: Provident Fund
+  designation: officer
+  question: I have only been here eight months. Can I apply?
+  history_question: How long do I have to work here before I can apply for a provident fund loan?
+  expected: ["doc-14908bcf9bf82ed2:12"]
+  ground_truth: No. Eligibility starts after nine months of continuous service.
+- id: pf_04
+  document: Provident Fund
+  designation: officer
+  question: Can I take another provident fund loan while I still owe one?
+  expected: ["doc-14908bcf9bf82ed2:12"]
+  ground_truth: No. Any outstanding PF loan must be fully settled before a new one is disbursed.
+- id: pf_05
+  document: Provident Fund
+  designation: officer
+  question: Is a provident fund loan interest free?
+  expected: ["doc-14908bcf9bf82ed2:13"]
+  ground_truth: Yes. It is interest-free because it is against the employee and employer PF balance.
+- id: pf_06
+  document: Provident Fund
+  designation: officer
+  question: I have two years of service. How much of my PF can I borrow and over how many months?
+  expected: ["doc-14908bcf9bf82ed2:16"]
+  ground_truth: 75 percent of PF, repaid in up to 12 months. Approvers are the line manager and the Head of HR.
+- id: pf_07
+  document: Provident Fund
+  designation: officer
+  question: I have four years of service. What is my PF loan limit and installment period?
+  expected: ["doc-14908bcf9bf82ed2:17"]
+  ground_truth: 75 percent of PF, up to 15 months. Approvers are the line manager and the Head of HR.
+- id: pf_08
+  document: Provident Fund
+  designation: officer
+  question: I have seven years of service. Who else has to approve my PF loan?
+  expected: ["doc-14908bcf9bf82ed2:18"]
+  ground_truth: 80 percent of PF, up to 20 months. Approvers are the line manager, the HOD, and the Head of HR.
+- id: pf_09
+  document: Provident Fund
+  designation: officer
+  question: I have been here more than nine years. What PF loan can I get?
+  expected: ["doc-14908bcf9bf82ed2:19"]
+  ground_truth: 85 percent of PF, up to 24 months. Approvers are the line manager, the HOD, and the Head of HR.
+- id: pf_10
+  document: Provident Fund
+  designation: officer
+  question: Is that percentage only my own contribution?
+  history_question: I have been here more than nine years. What PF loan can I get?
+  expected: ["doc-14908bcf9bf82ed2:20"]
+  ground_truth: No. The percentage is of the accumulated balance, including both employee and employer contributions.
+- id: pf_11
+  document: Provident Fund
+  designation: officer
+  question: How is a provident fund loan recovered from me?
+  expected: ["doc-14908bcf9bf82ed2:14"]
+  ground_truth: Equal monthly installments deducted from salary through payroll.
+- id: pf_12
+  document: Provident Fund
+  designation: officer
+  question: Can I settle my PF loan early?
+  expected: ["doc-14908bcf9bf82ed2:14"]
+  ground_truth: Yes. Ask HR to deduct part or all from salary, or deposit it in the company bank account and tell HR. Finance confirms, then HR adjusts payroll.
+- id: pf_13
+  document: Provident Fund
+  designation: officer
+  question: What happens to my PF loan if I resign?
+  expected: ["doc-14908bcf9bf82ed2:25", "doc-14908bcf9bf82ed2:14"]
+  match: any
+  ground_truth: The outstanding loan is adjusted against the PF balance in full and final settlement.
+- id: pf_14
+  document: Provident Fund
+  designation: officer
+  question: What if the loan is larger than my PF balance when I leave?
+  history_question: What happens to my PF loan if I resign?
+  expected: ["doc-14908bcf9bf82ed2:25"]
+  ground_truth: The excess is recovered from other dues. If those are not enough, Administration Legal pursues recovery.
+- id: pf_15
+  document: Provident Fund
+  designation: officer
+  question: How many days does a complete PF loan take to process?
+  expected: ["doc-14908bcf9bf82ed2:24"]
+  ground_truth: Five to seven working days after complete documentation. An incomplete request is returned.
+- id: pf_16
+  document: Provident Fund
+  designation: officer
+  question: Can HR process my PF loan on paper instead of ESS?
+  expected: ["doc-14908bcf9bf82ed2:23"]
+  ground_truth: No, unless a competent authority formally approves a manual exception.
+- id: pf_17
+  document: Provident Fund
+  designation: officer
+  question: From when does the head office provident fund loan policy apply?
+  expected: ["doc-14908bcf9bf82ed2:26"]
+  ground_truth: 1 May 2026. It replaces earlier written or verbal PF loan practices for Head Office RSC employees.
+
+- id: med_01
+  document: Medical
+  designation: general_manager
+  question: Who is covered by the medical insurance policy?
+  expected: ["doc-922ff7991e7a9615:2"]
+  ground_truth: Permanent management employees, including senior store managers, store managers, assistant store managers, and branch accountants. Cover includes the employee, spouse, and dependent children.
+- id: med_02
+  document: Medical
+  designation: general_manager
+  question: Until what age are my children covered?
+  expected: ["doc-922ff7991e7a9615:2"]
+  ground_truth: Daughters and sons are covered until 18. The employee and spouse are covered from 18 until 65.
+- id: med_03
+  document: Medical
+  designation: general_manager
+  question: My spouse already has medical cover at another company. Can we still use Stylo's?
+  expected: ["doc-922ff7991e7a9615:2"]
+  ground_truth: Only if the employee or spouse declares that in writing.
+- id: med_04
+  document: Medical
+  designation: general_manager
+  question: Who can claim maternity, and until what age?
+  expected: ["doc-922ff7991e7a9615:6"]
+  ground_truth: Married permanent management employees, including shop managers, branch accountants, and assistant shop managers. Females until age 45.
+- id: med_05
+  document: Medical
+  designation: general_manager
+  question: What is the hospitalization limit on plan A?
+  expected: ["doc-922ff7991e7a9615:21"]
+  ground_truth: 500,000 for the employee, spouse, and children. Room and board is 12,000 a day. Normal delivery is 100,000. Complicated or caesarean delivery is 180,000.
+- id: med_06
+  document: Medical
+  designation: executive
+  question: What is my daily room limit on the medical plan for an executive?
+  expected: ["doc-922ff7991e7a9615:23"]
+  ground_truth: Plan C. Room and board is 7,000 a day. Hospitalization is 300,000.
+- id: med_07
+  document: Medical
+  designation: general_manager
+  question: Will the policy pay for dental treatment?
+  expected: ["doc-922ff7991e7a9615:26"]
+  ground_truth: Not for ordinary dental treatment, X-rays, extractions, or fillings. Only pain relief after an accidental injury.
+- id: med_08
+  document: Medical
+  designation: general_manager
+  question: Are glasses covered?
+  history_question: Will the policy pay for dental treatment?
+  expected: ["doc-922ff7991e7a9615:26"]
+  ground_truth: No. Eyeglasses, contact lenses, and hearing aids are excluded unless surgically required.
+- id: med_09
+  document: Medical
+  designation: general_manager
+  question: Is cosmetic surgery covered?
+  expected: ["doc-922ff7991e7a9615:26"]
+  ground_truth: No, unless it is medically required because of an accidental injury while the person was covered.
+- id: med_10
+  document: Medical
+  designation: general_manager
+  question: I need emergency admission at a panel hospital. What do I show?
+  expected: ["doc-922ff7991e7a9615:9"]
+  ground_truth: The health card and proof of identity, preferably the CNIC, at admission.
+- id: med_11
+  document: Medical
+  designation: general_manager
+  question: The emergency did not need me to be admitted. Can I use the health card?
+  expected: ["doc-922ff7991e7a9615:9"]
+  ground_truth: No. Pay first. Eligible expenses can be claimed with the in-patient claim form and supporting papers through HR.
+- id: med_12
+  document: Medical
+  designation: general_manager
+  question: I was admitted at a hospital that is not on the panel. What are the deadlines?
+  expected: ["doc-922ff7991e7a9615:30"]
+  ground_truth: Tell Jubilee within 24 hours for an emergency. Submit original bills and the claim form within 30 days of discharge.
+- id: med_13
+  document: Medical
+  designation: general_manager
+  question: Which papers do I attach for that reimbursement?
+  history_question: I was admitted at a hospital that is not on the panel. What are the deadlines?
+  expected: ["doc-922ff7991e7a9615:29"]
+  ground_truth: Claim form parts A and B, original itemized hospital bill, discharge summary, hospital notes, medicine prescription, original medicine invoices, and exam reports. Maternity also needs the hospital birth certificate and ultrasound report.
+- id: med_14
+  document: Medical
+  designation: general_manager
+  question: I am 66. Will a new hospital claim be paid?
+  expected: ["doc-922ff7991e7a9615:27"]
+  ground_truth: No treatment for a person over 65 at the date the event starts, unless the insurer agreed in writing before the policy began.
+- id: med_15
+  document: Medical
+  designation: general_manager
+  question: If I take a more expensive room than my limit, who pays the difference?
+  expected: ["doc-922ff7991e7a9615:27"]
+  ground_truth: The extra cost of a room above the daily room limit is not paid.
+- id: med_16
+  document: Medical
+  designation: general_manager
+  question: When does HR enroll a new employee for medical cover?
+  expected: ["doc-922ff7991e7a9615:12"]
+  ground_truth: At confirmation. HR collects the enrollment form, including dependents, keeps a copy, sends the original to the insurer, and later gives the employee the health card.
+- id: med_17
+  document: Medical
+  designation: general_manager
+  question: I just got married. How do I add my spouse?
+  expected: ["doc-922ff7991e7a9615:13"]
+  ground_truth: Tell HR with the marriage certificate through the Status Change Form. A birth is reported the same way with the birth certificate.
+- id: med_18
+  document: Medical
+  designation: general_manager
+  question: When does my medical cover stop?
+  expected: ["doc-922ff7991e7a9615:14"]
+  ground_truth: When employment ends, or if the employee dies.
+
+- id: tr_01
+  document: Travel
+  designation: general_manager
+  question: Who does the travel policy apply to, and how far does the trip have to be?
+  expected: ["doc-c3ff72f11b544fd9:3"]
+  ground_truth: Permanent management employees traveling in the country for work, 300 km or more round trip. Group travel for conferences, outbreaks, and group training is excluded from that purpose.
+- id: tr_02
+  document: Travel
+  designation: general_manager
+  question: When do I get a full daily allowance, and when only half?
+  expected: ["doc-c3ff72f11b544fd9:26"]
+  ground_truth: Full DA for a full calendar day or more than 12 hours away. Half DA for a same-day return of 12 hours or less. The trip must be 300 km or more round trip, including transit.
+- id: tr_03
+  document: Travel
+  designation: general_manager
+  question: The training gives breakfast and lunch. Do I still get daily allowance?
+  expected: ["doc-c3ff72f11b544fd9:26"]
+  ground_truth: Half DA, to cover dinner and other out-of-pocket costs. If the trip is fully sponsored, no DA.
+- id: tr_04
+  document: Travel
+  designation: general_manager
+  question: Does daily allowance include the weekend in the middle of my trip?
+  history_question: When do I get a full daily allowance, and when only half?
+  expected: ["doc-c3ff72f11b544fd9:26"]
+  ground_truth: Yes. DA is paid for weekends and public holidays during the business trip. It covers meals, tips, laundry, and incidentals, not the hotel or taxi.
+- id: tr_05
+  document: Travel
+  designation: general_manager
+  question: What is the daily allowance for a general manager?
+  expected: ["doc-c3ff72f11b544fd9:28"]
+  ground_truth: 1,800 rupees a day for Deputy General Manager to General Manager.
+- id: tr_06
+  document: Travel
+  designation: manager
+  question: What is the daily allowance for a manager?
+  expected: ["doc-c3ff72f11b544fd9:30"]
+  ground_truth: 1,500 rupees a day for Assistant Manager and Manager.
+- id: tr_07
+  document: Travel
+  designation: general_manager
+  question: Can I book my own hotel, or does someone else do it?
+  expected: ["doc-c3ff72f11b544fd9:23"]
+  ground_truth: The booking request goes to Administration, which chooses the stay by entitlement and company interest.
+- id: tr_08
+  document: Travel
+  designation: general_manager
+  question: If I want a double room, who pays the extra?
+  expected: ["doc-c3ff72f11b544fd9:23"]
+  ground_truth: Accommodation is single occupancy. The employee pays the double-occupancy difference in cash.
+- id: tr_09
+  document: Travel
+  designation: general_manager
+  question: I am travelling with my boss. Can I stay in the same hotel?
+  expected: ["doc-c3ff72f11b544fd9:23"]
+  ground_truth: Yes, if HR approves it in advance.
+- id: tr_10
+  document: Travel
+  designation: executive
+  question: I am a woman travelling inside Pakistan. Am I limited to my grade's hotel?
+  expected: ["doc-c3ff72f11b544fd9:25"]
+  ground_truth: No. A female employee may stay at a secure hotel, including a five-star hotel, when necessary, regardless of entitlement.
+- id: tr_11
+  document: Travel
+  designation: general_manager
+  question: Does the hotel entitlement include dinner?
+  history_question: Can I book my own hotel, or does someone else do it?
+  expected: ["doc-c3ff72f11b544fd9:25"]
+  ground_truth: Hotel expenses other than room rent include breakfast only.
+- id: tr_12
+  document: Travel
+  designation: general_manager
+  question: Can the company pay for my family to travel with me?
+  expected: ["doc-c3ff72f11b544fd9:37"]
+  ground_truth: No. Family travel, accommodation, and meals are at the employee's own expense.
+- id: tr_13
+  document: Travel
+  designation: general_manager
+  question: How soon must I submit my travel expense form?
+  expected: ["doc-c3ff72f11b544fd9:36"]
+  ground_truth: Within 7 days of returning, to Finance, with original bills and receipts, and with prior approval.
+- id: tr_14
+  document: Travel
+  designation: general_manager
+  question: What class can a general manager fly?
+  expected: ["doc-c3ff72f11b544fd9:13"]
+  ground_truth: Economy class, local and international. Rail is A/C sleeper or A/C business. Road is a company-maintained vehicle or Daewoo Super Luxury.
+- id: tr_15
+  document: Travel
+  designation: general_manager
+  question: Who approves travel for a manager?
+  expected: ["doc-c3ff72f11b544fd9:10"]
+  ground_truth: The Head of Department, for Manager, Assistant Manager, Senior Executive, Executive, Officer, and below.
+- id: tr_16
+  document: Travel
+  designation: regional_sales_manager
+  question: I am a regional sales manager going to another town and back the same day, about 30 km one way. Do I get a daily tour allowance?
+  expected: ["doc-c3ff72f11b544fd9:32"]
+  ground_truth: Yes if it is 25 km or more one way from the base town and it is a same-day return.
+- id: tr_17
+  document: Travel
+  designation: general_manager
+  question: From when is the travel policy effective?
+  expected: ["doc-c3ff72f11b544fd9:41"]
+  ground_truth: 15 April 2025. It replaces earlier travel policies.
+
+- id: coc_01
+  document: Code of Conduct
+  designation: intern
+  question: What are Stylo's values?
+  expected: ["doc-e50809e1dd67ce54:5"]
+  ground_truth: Innovation, Teamwork, Integrity, Customer Service, Entrepreneurship, and Respect.
+- id: coc_02
+  document: Code of Conduct
+  designation: officer
+  question: Can I accept a gift from a supplier?
+  expected: ["doc-e50809e1dd67ce54:9"]
+  ground_truth: Only if it is modest, not over PKR 25,000, infrequent, and not meant to influence a decision. It must be reported to a manager. Significant personal gifts are not allowed.
+- id: coc_03
+  document: Code of Conduct
+  designation: officer
+  question: The gift is 30,000 rupees. Is that allowed?
+  history_question: Can I accept a gift from a supplier?
+  expected: ["doc-e50809e1dd67ce54:9"]
+  ground_truth: No. Modest gifts must not exceed PKR 25,000.
+- id: coc_04
+  document: Code of Conduct
+  designation: officer
+  question: Can I offer a payment to speed up a government decision if I never actually pay it?
+  expected: ["doc-e50809e1dd67ce54:8"]
+  ground_truth: No. Offering, promising, or authorising such a payment is a violation even if it is not completed.
+- id: coc_05
+  document: Code of Conduct
+  designation: officer
+  question: Can I pay a supplier in cash?
+  expected: ["doc-e50809e1dd67ce54:8"]
+  ground_truth: No, except approved petty cash. Payments go to the bank account the recipient names in writing. Offshore diversion is rejected.
+- id: coc_06
+  document: Code of Conduct
+  designation: officer
+  question: Who can post on social media as Stylo?
+  expected: ["doc-e50809e1dd67ce54:18"]
+  ground_truth: Only authorized spokespersons. Do not share confidential information, internal images, or unapproved marketing. Personal posts must not harm Stylo or conflict with the role.
+- id: coc_07
+  document: Code of Conduct
+  designation: officer
+  question: I saw a false post about Stylo online. Who do I tell?
+  history_question: Who can post on social media as Stylo?
+  expected: ["doc-e50809e1dd67ce54:18"]
+  ground_truth: Report it to the Communications team.
+- id: coc_08
+  document: Code of Conduct
+  designation: officer
+  question: Where do I report harassment?
+  expected: ["doc-e50809e1dd67ce54:16"]
+  ground_truth: Line manager, HR, or the Internal Complaints Committee. Reports are confidential, and retaliation for a good-faith report is prohibited.
+- id: coc_09
+  document: Code of Conduct
+  designation: officer
+  question: If I refuse a sale because it would break the code, can my manager punish me for the lost business?
+  expected: ["doc-e50809e1dd67ce54:6"]
+  ground_truth: No. Senior management will not hold an employee accountable for loss of business that comes from complying with the code. Good-faith reports are protected from retaliation.
+- id: coc_10
+  document: Code of Conduct
+  designation: officer
+  question: Can I volunteer at a local school?
+  expected: ["doc-e50809e1dd67ce54:6"]
+  ground_truth: Yes, if it fits Stylo's values and does not create a conflict of interest.
+- id: coc_11
+  document: Code of Conduct
+  designation: officer
+  question: I am not sure whether a labour law allows something. Who do I ask?
+  expected: ["doc-e50809e1dd67ce54:7"]
+  ground_truth: The manager or HR, immediately.
+- id: coc_12
+  document: Code of Conduct
+  designation: officer
+  question: What counts as fraud in the code of conduct?
+  expected: ["doc-e50809e1dd67ce54:9"]
+  ground_truth: Intentional misappropriation, forgery, omission, or removal of data, money, or goods. Report it at once to a manager or Audit and Compliance.
+- id: coc_13
+  document: Code of Conduct
+  designation: store_manager
+  question: Who has to make sure the store team understands the business principles?
+  expected: ["doc-e50809e1dd67ce54:4"]
+  ground_truth: Every department head and store manager.
+- id: coc_14
+  document: Code of Conduct
+  designation: officer
+  question: Does the code of conduct form part of my appointment letter?
+  expected: ["doc-e50809e1dd67ce54:18"]
+  ground_truth: Yes. It is part of the employment terms and the appointment letter.
+- id: coc_15
+  document: Code of Conduct
+  designation: officer
+  question: How should we hire and promote people?
+  expected: ["doc-e50809e1dd67ce54:6"]
+  ground_truth: Solely on suitability for the job, with a safe workplace in stores, warehouses, and offices.
+
+- id: ca_01
+  document: Corrective Action
+  designation: intern
+  question: Does the corrective action policy apply to interns and contract staff?
+  expected: ["doc-6a4e4417299da190:4"]
+  ground_truth: Yes. It covers permanent employees, contractual employees, and interns or trainees at head office, regional offices, warehouses, and retail outlets. Vendors and consultants are handled under their own contracts.
+- id: ca_02
+  document: Corrective Action
+  designation: officer
+  question: Is theft handled step by step, or can it lead to dismissal at once?
+  expected: ["doc-6a4e4417299da190:39"]
+  ground_truth: Immediate dismissal. That includes theft, unauthorized removal, wrongful possession, stock shortage, or deception.
+- id: ca_03
+  document: Corrective Action
+  designation: officer
+  question: What about coming late or breaking the dress code?
+  expected: ["doc-6a4e4417299da190:89"]
+  ground_truth: Those are minor. The steps are a verbal warning, then a first written warning.
+- id: ca_04
+  document: Corrective Action
+  designation: officer
+  question: So dress code is not instant dismissal?
+  history_question: What about coming late or breaking the dress code?
+  expected: ["doc-6a4e4417299da190:33", "doc-6a4e4417299da190:89"]
+  match: any
+  ground_truth: Dress-code non-compliance is a progressive violation, and the severity matrix treats a dress-code breach as minor.
+- id: ca_05
+  document: Corrective Action
+  designation: officer
+  question: Can harassment lead to immediate dismissal?
+  expected: ["doc-6a4e4417299da190:42"]
+  ground_truth: Yes. Sexual, racial, or other harassment of employees, customers, or visitors may lead to immediate dismissal.
+- id: ca_06
+  document: Corrective Action
+  designation: officer
+  question: I spoke to a newspaper about an internal matter without permission. How serious is that?
+  expected: ["doc-6a4e4417299da190:45"]
+  ground_truth: Unauthorized disclosure of confidential information, including contact with mass media or competitors without permission, may lead to immediate dismissal.
+- id: ca_07
+  document: Corrective Action
+  designation: store_manager
+  question: A store incident just happened. How fast must the incident report go out, and to whom?
+  expected: ["doc-6a4e4417299da190:108"]
+  ground_truth: The ASM prepares the incident report and sends it to the Regional People Specialist within 24 hours of knowing about the incident.
+- id: ca_08
+  document: Corrective Action
+  designation: store_manager
+  question: How long does the store manager have to reply to a show cause?
+  history_question: A store incident just happened. How fast must the incident report go out, and to whom?
+  expected: ["doc-6a4e4417299da190:114"]
+  ground_truth: Four days after receiving the show cause letter. The reply goes to the People Partner.
+- id: ca_09
+  document: Corrective Action
+  designation: officer
+  question: Is fighting at work a progressive warning or immediate dismissal?
+  expected: ["doc-6a4e4417299da190:51"]
+  ground_truth: Immediate dismissal. That includes physical assault during working hours and using abusive language or disrespecting a colleague.
+- id: ca_10
+  document: Corrective Action
+  designation: officer
+  question: What if someone sells shoes that the company did not supply?
+  expected: ["doc-6a4e4417299da190:50"]
+  ground_truth: That can be immediate dismissal, including selling unauthorized brands or goods for personal gain, or selling without a proper cash memo or at a price the company did not fix.
+- id: ca_11
+  document: Corrective Action
+  designation: officer
+  question: Is smoking in the stock room immediate dismissal?
+  expected: ["doc-6a4e4417299da190:32"]
+  ground_truth: No. Smoking in the office, sales floor, or stock room is listed as a progressive corrective-action violation.
+- id: ca_12
+  document: Corrective Action
+  designation: officer
+  question: What if sale money is not sent to head office on time?
+  expected: ["doc-6a4e4417299da190:49"]
+  ground_truth: Not remitting sale proceeds to head office in time may lead to immediate dismissal.
+- id: ca_13
+  document: Corrective Action
+  designation: officer
+  question: Can someone be dismissed for refusing a line manager's order?
+  expected: ["doc-6a4e4417299da190:53"]
+  ground_truth: Direct refusal of a line manager's orders, including serious refusal to perform assigned duties, may lead to immediate dismissal.
+- id: ca_14
+  document: Corrective Action
+  designation: officer
+  question: Are alcohol or prohibited drugs on the premises a warning first?
+  expected: ["doc-6a4e4417299da190:48"]
+  ground_truth: No. Using prohibited drugs, alcohol, or abusing solvents on company premises, or being affected by them so that safety or work suffers, may lead to immediate dismissal.
+- id: ca_15
+  document: Corrective Action
+  designation: store_manager
+  question: How long can a store manager be suspended during an inquiry?
+  expected: ["doc-6a4e4417299da190:116"]
+  ground_truth: A suspension letter is issued after every 4 days, up to a maximum of 28 days.
+- id: ca_16
+  document: Corrective Action
+  designation: officer
+  question: Does falsifying a company record start with a verbal warning?
+  expected: ["doc-6a4e4417299da190:40"]
+  ground_truth: No. Deliberate falsification of company documents, records, or accounts may lead to immediate dismissal.

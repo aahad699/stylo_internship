@@ -1,6 +1,7 @@
 // Keep these option values aligned with ROLE_LABELS in backend/app/access.py.
 export const DESIGNATIONS = [
   ["intern","Intern"],
+  ["contract","Contract"],
   ["employee","Employee"],
   ["manager","Manager"],
   ["hr","HR"],

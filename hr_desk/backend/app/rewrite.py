@@ -1,7 +1,8 @@
-"""Turn a follow-up into one search question, and drop history on a topic change."""
+"""Turn a follow-up into one search question. A previous turn is sent to the rewrite."""
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 
@@ -9,10 +10,7 @@ from .config import CHAT_CONTEXT_BYTES, HISTORY_TURNS
 from .textutil import token_set
 
 _FOLLOW = re.compile(r"(?i)^(?:(?:and|also)\s+)?(?:what|how) about\s+(.+?)\s*\??$")
-_CONTINUE = re.compile(r"(?i)^(and|also|same|again|more|else|that|this|it|its|why|how)\b")
 _FOLLOW_UP_WORDS = {"not", "again", "more", "else", "same", "also"}
-_ATTRIBUTE_WORDS = {"maximum", "minimum", "max", "min", "amount", "limit", "rate", "percentage", "deadline",
-                    "duration", "period", "much", "long", "days", "months", "eligible", "eligibility"}
 _RECALL = re.compile(
     r"(?i)^(?:(?:what(?:'s|s|\s+(?:is|was))|(?:show|repeat|tell) me)\s+)?"
     r"(?:my|the)\s+(first|second|third|last|previous|\d{1,3}(?:st|nd|rd|th)?)\s+(?:saved\s+)?question[?.!]*$"
@@ -76,10 +74,133 @@ def recent_history(history: list[dict], limit: int = HISTORY_TURNS) -> list[dict
     return list(reversed(cleaned))
 
 
+def context_digest(turns: list[dict]) -> str:
+    """Short id of the recent turns a follow-up was rewritten with. Empty when there are none."""
+    if not turns:
+        return ""
+    packed = "\n".join(f"{turn.get('role', '')}:{turn.get('text', '')}" for turn in turns)
+    return hashlib.sha256(packed.encode()).hexdigest()[:16]
+
+
+def same_subject(left: str, right: str) -> bool:
+    """The two questions name the same subject. Gift does not match mileage."""
+    from .textutil import _stem, token_set
+
+    left_stems = {_stem(token) for token in token_set(left)}
+    right_stems = {_stem(token) for token in token_set(right)}
+    return bool(left_stems) and left_stems == right_stems
+
+
+def cache_question(question: str, turns: list[dict] | None = None) -> str:
+    """The cache key: folded wording, plus the recent-turn id when there is one.
+
+    "What's" and "What is" share a key. A shorter question, such as "gift limit", does not.
+    """
+    text = (question or "").strip().replace("\u2019", "'").replace("\u2018", "'")
+    text = re.sub(r"(?i)\bwhat(?:'s|s)\b", "what is", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
+    digest = context_digest(list(turns or []))
+    return f"{text}\n{digest}" if digest else text
+
+
+def conversation_text(turns: list[dict]) -> str:
+    """The recent exchanges the answer may use to understand a follow-up."""
+    lines = []
+    for turn in turns or []:
+        role = turn.get("role")
+        text = (turn.get("text") or "").strip()
+        if role == "user" and text:
+            lines.append(f"Employee: {text}")
+        elif role == "assistant" and text:
+            # "Assistant:" is removed as a control line before the model sees the message.
+            lines.append(f"Answer: {text}")
+    return "\n".join(lines)
+
+
 def _last_user_question(history: list[dict]) -> str:
     for turn in reversed(history):
         if turn["role"] == "user":
             return turn["text"]
+    return ""
+
+
+_BARE_YES = re.compile(r"(?i)^(?:yes|yeah|yep|sure|ok|okay)(?:\s*,?\s*please)?[?.!]*$")
+_REFERRAL_FOLLOW = re.compile(
+    r"(?i)^(?:(?:yes|yeah|yep|sure|ok|okay)\b\s*[,:-]?\s*)?(?:please\s+)?"
+    r"(?:(?:can|could)\s+you\s+)?"
+    r"(?:tell\s+me(?:\s+about)?|what\s+about|what\s+does|explain|describe|show\s+me)\s+"
+    r"(?:(?:this|that|the|it)\s+)"
+    r"(?P<kind>annexures?|sections?|points?|clauses?)"
+    r"(?:\s+say)?\s*[?.!]*$"
+)
+_POINTER_ANNEXURE = re.compile(
+    r"(?i)\b(?:please\s+refer\s+to|refer\s+to|see|defined\s+in|outlined\s+in|specified\s+in|"
+    r"set\s+out\s+in|listed\s+in|shown\s+in|mentioned\s+in|as\s+per)\s+(?:the\s+)?annexure\s+([a-z])\b"
+    r"|:\s*annexure\s+([a-z])\b"
+)
+_POINTER_SECTION = re.compile(
+    r"(?i)\b(?:mentioned|described|specified|defined|set\s+out|covered|stated)\s+in\s+"
+    r"(?:point|clause|section)\s+(\d+(?:\.\d+)*)"
+    r"|\b(?:please\s+)?refer\s+to\s+(?:point|clause|section)\s+(\d+(?:\.\d+)*)"
+    r"|\bsee\s+(?:point|clause|section)\s+(\d+(?:\.\d+)*)"
+)
+
+
+@dataclass(frozen=True)
+class ReferralTarget:
+    kind: str
+    name: str
+    policy_title: str = ""
+
+
+def referral_request(question: str) -> str | None:
+    """A follow-up that means the section or annexure the previous answer pointed to.
+
+    "annexure" and "section" name which kind. "any" is a bare yes. None is a new question.
+    """
+    text = (question or "").strip()
+    match = _REFERRAL_FOLLOW.fullmatch(text)
+    if match:
+        return "annexure" if match.group("kind").casefold().startswith("annexure") else "section"
+    if _BARE_YES.fullmatch(text):
+        return "any"
+    return None
+
+
+def pointers_in(text: str, titles: list[str], default_title: str = "") -> list[ReferralTarget]:
+    """Annexure letters and section numbers a passage tells the reader to open."""
+    found: list[ReferralTarget] = []
+    seen: set[tuple[str, str, str]] = set()
+    for pattern, kind in ((_POINTER_ANNEXURE, "annexure"), (_POINTER_SECTION, "section")):
+        for match in pattern.finditer(text or ""):
+            name = next(group for group in match.groups() if group)
+            title = _policy_after(text, match.end(), titles) or default_title
+            item = ReferralTarget(kind, name.upper() if kind == "annexure" else name, title)
+            key = (item.kind, item.name.casefold(), item.policy_title.casefold())
+            if key not in seen:
+                seen.add(key)
+                found.append(item)
+    return found
+
+
+def choose_pointers(targets: list[ReferralTarget], kind: str) -> list[ReferralTarget]:
+    """Prefer the kind the employee named. A bare yes keeps every pointer."""
+    if kind == "annexure":
+        preferred = [target for target in targets if target.kind == "annexure"]
+    elif kind == "section":
+        preferred = [target for target in targets if target.kind == "section"]
+    else:
+        preferred = targets
+    return preferred or list(targets)
+
+
+def _policy_after(text: str, end: int, titles: list[str]) -> str:
+    tail = (text or "")[end:end + 90]
+    for title in sorted(titles, key=len, reverse=True):
+        if len(title) < 4:
+            continue
+        if re.match(rf"(?i)\s*(?:of|in)\s+(?:the\s+)?{re.escape(title)}\b", tail):
+            return title
     return ""
 
 
@@ -89,7 +210,7 @@ def topic_words(text: str) -> set[str]:
 
 
 def rewrite_question(question: str, history: list[dict]) -> Rewrite:
-    """Rules cover the common cases. needs_model means a cheap model should rewrite."""
+    """A previous turn goes to the cheap rewrite. The first question in a chat does not."""
     text = question.strip()
     turns = recent_history(history)
     prior = _last_user_question(turns)
@@ -103,19 +224,9 @@ def rewrite_question(question: str, history: list[dict]) -> Rewrite:
         )
         if travel_prior and re.search(r"\b(?:hotel|lodging|fuel|mileage|allowance)\b", topic, re.I):
             return Rewrite(f"what is my {topic}", prior, "follow-up")
-        shared = token_set(topic) & token_set(prior)
-        if shared:
+        # "What about the allowance?" names a word already in the previous question.
+        if token_set(topic) & token_set(prior):
             return Rewrite(topic, prior, "follow-up")
-        return Rewrite(topic, "", "topic-change")
-    words = re.findall(r"[A-Za-z0-9']+", text)
-    # "and for managers" and "why not" still need the previous question.
-    # "ceo" and "message from ceo" name their own subject, so history stays out.
-    if prior and (_CONTINUE.match(text) or topic_words(text) <= _ATTRIBUTE_WORDS):
-        # "What is the maximum amount?" asks about a property of the previous subject without naming it.
-        return Rewrite(text, prior, "model", needs_model=True)
-    if len(words) >= 4 or topic_words(text):
-        note = "topic-change" if prior else "no-history"
-        return Rewrite(text, "", note)
     if not prior:
         return Rewrite(text, "", "no-history")
     return Rewrite(text, prior, "model", needs_model=True)

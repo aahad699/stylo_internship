@@ -6,7 +6,7 @@ import re #regular expressions
 from dataclasses import dataclass
 
 from .config import EMPTY_QUESTION, MAX_USER_CHARS, TOO_LONG
-from .replies import REFUSAL
+from .replies import REFUSAL, ROLE_FILTER
 from .textutil import normalize_for_rules
 
 _JAILBREAKS = (
@@ -51,6 +51,20 @@ _NAMED_EARNINGS = re.compile(
     r"(?:earns|is paid|receives (?:a salary of|pay of))\s+(?:(?i:Rs\.?|PKR)\s*|[$£€]\s*)?\d"
 )
 
+# Asking to drop the designation check is a role boundary, not a missing policy.
+_ROLE_BYPASS = (
+    re.compile(r"\b(?:designation|role|audience|grade) filter\b"),
+    re.compile(r"\bdespite (?:any|the|all) (?:designation|role|grade)s?\b"),
+    re.compile(r"\bregardless of (?:any |the |all |my )?(?:designation|role|grade)s?\b"),
+    re.compile(
+        r"\b(?:ignore|bypass|override|disregard|skip|drop|remove) "
+        r"(?:the |any |all |my )?(?:designation|audience|grade)(?: filter)?\b"
+        r"|\b(?:ignore|bypass|override|disregard|skip|drop|remove) (?:the |any |all |my )?role filter\b"
+    ),
+    re.compile(r"\bno matter (?:what |the |my )?(?:designation|role|grade)\b"),
+    re.compile(r"\bwithout (?:any |the |a )?(?:designation|role|audience) (?:filter|restriction|limit)\b"),
+)
+
 _UNSURE = (
     re.compile(r"\bpretend\b"),
     re.compile(r"\bact as\b"),
@@ -82,6 +96,8 @@ def check_question(question: str) -> GuardDecision:
     folded = normalize_for_rules(text)
     if any(pattern.search(folded) for pattern in _JAILBREAKS) or _CLAIMED_ACCESS.search(text):
         return GuardDecision("block", REFUSAL, "jailbreak")
+    if any(pattern.search(folded) for pattern in _ROLE_BYPASS):
+        return GuardDecision("role", ROLE_FILTER, "designation-filter")
     if contains_named_pay(text):
         return GuardDecision("pay", REFUSAL, "pay")
     if any(pattern.search(folded) for pattern in _UNSURE):

@@ -41,7 +41,6 @@ BEGIN
   END IF;
 END;
 $$;
-ALTER TABLE answer_cache DROP COLUMN IF EXISTS embedding;
 CREATE TABLE IF NOT EXISTS policy_drafts (
   id TEXT PRIMARY KEY,
   prepared JSONB NOT NULL,
@@ -83,6 +82,9 @@ CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL REFERENCES employees(email) ON DELETE CASCADE,
   messages JSONB NOT NULL DEFAULT '[]',
+  title TEXT,
+  pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  pinned_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS conversation_owner ON conversations(email, updated_at DESC);
@@ -357,7 +359,10 @@ class PostgresOperations:
             cur.execute(
                 """
                 DELETE FROM conversations WHERE id IN (
-                    SELECT id FROM conversations WHERE email = %s ORDER BY updated_at DESC, id OFFSET 20
+                    SELECT id FROM conversations
+                    WHERE email = %s AND NOT pinned
+                    ORDER BY updated_at DESC, id
+                    OFFSET 20
                 )
                 """,
                 (email,),
@@ -368,15 +373,101 @@ class PostgresOperations:
         with self._lock, self.conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, coalesce(messages->0->>'text', 'New chat'), updated_at
+                SELECT id,
+                       coalesce(nullif(btrim(title), ''), left(coalesce(messages->0->>'text', 'New chat'), 70)),
+                       updated_at, pinned
                 FROM conversations WHERE email = %s
                   AND updated_at >= now() - make_interval(days => %s)
-                ORDER BY updated_at DESC, id LIMIT 20
+                  AND (
+                    pinned OR id IN (
+                      SELECT id FROM conversations
+                      WHERE email = %s AND NOT pinned
+                        AND updated_at >= now() - make_interval(days => %s)
+                      ORDER BY updated_at DESC, id
+                      LIMIT 20
+                    )
+                  )
+                ORDER BY pinned DESC, pinned_at DESC NULLS LAST, updated_at DESC, id
                 """,
-                (email, CHAT_RETENTION_DAYS),
+                (email, CHAT_RETENTION_DAYS, email, CHAT_RETENTION_DAYS),
             )
-            return [{"id": key, "title": title[:70], "updatedAt": updated.isoformat()}
-                    for key, title, updated in cur.fetchall()]
+            return [self._chat_summary(key, title, updated, pinned) for key, title, updated, pinned in cur.fetchall()]
+
+    def update_conversation(self, email: str, key: str, *, title: str | None = None, pinned: bool | None = None):
+        if title is None and pinned is None:
+            return None
+        assignments = []
+        params: list = []
+        if title is not None:
+            assignments.append("title = %s")
+            params.append(title)
+        if pinned is not None:
+            assignments.append("pinned = %s")
+            params.append(pinned)
+            assignments.append("pinned_at = CASE WHEN %s THEN COALESCE(pinned_at, now()) ELSE NULL END")
+            params.append(pinned)
+        params.extend((key, email, CHAT_RETENTION_DAYS))
+        with self._lock, self.conn.cursor() as cur, self.conn.transaction():
+            cur.execute(
+                f"""
+                UPDATE conversations SET {", ".join(assignments)}
+                WHERE id = %s AND email = %s
+                  AND updated_at >= now() - make_interval(days => %s)
+                """,
+                params,
+            )
+            if cur.rowcount != 1:
+                return None
+            cur.execute(
+                """
+                SELECT id,
+                       coalesce(nullif(btrim(title), ''), left(coalesce(messages->0->>'text', 'New chat'), 70)),
+                       updated_at, pinned
+                FROM conversations WHERE id = %s AND email = %s
+                """,
+                (key, email),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return self._chat_summary(*row)
+
+    @staticmethod
+    def _chat_summary(key, title, updated, pinned):
+        shown = (title or "").strip() or "New chat"
+        when = updated.isoformat() if hasattr(updated, "isoformat") else str(updated)
+        return {"id": key, "title": shown[:70], "updatedAt": when, "pinned": bool(pinned)}
+
+    def conversation_updated_at(self, email: str, key: str) -> str | None:
+        with self._lock, self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT updated_at FROM conversations WHERE id = %s AND email = %s
+                    AND updated_at >= now() - make_interval(days => %s)
+                """,
+                (key, email, CHAT_RETENTION_DAYS),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        updated = row[0]
+        return updated.isoformat() if hasattr(updated, "isoformat") else str(updated)
+
+    def question_times(self, email: str) -> list[tuple[str, str]]:
+        with self._lock, self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT question, created_at FROM traces
+                WHERE email = %s AND created_at >= now() - interval '3 months'
+                ORDER BY created_at, id
+                """,
+                (email,),
+            )
+            rows = []
+            for question, created in cur.fetchall():
+                when = created.isoformat() if hasattr(created, "isoformat") else str(created)
+                rows.append((question or "", when))
+            return rows
 
     def conversation(self, email: str, key: str):
         with self._lock, self.conn.cursor() as cur:

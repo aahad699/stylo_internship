@@ -94,7 +94,7 @@ def user_message(
     }, ensure_ascii=False)
 
 
-def grouped_user_message(topics: list[TopicEvidence]) -> str:
+def grouped_user_message(topics: list[TopicEvidence], background: str = "") -> str:
     pool: dict[str, tuple[int, Passage]] = {}
     groups = []
     for topic in topics:
@@ -105,6 +105,7 @@ def grouped_user_message(topics: list[TopicEvidence]) -> str:
         groups.append({"number": topic.number, "question": topic.question, "allowed_evidence": references})
     return json.dumps({
         "topics": groups,
+        "conversation_context": model_data(background),
         "policy_evidence": {number: _evidence(passage) for number, passage in pool.values()},
     }, ensure_ascii=False)
 

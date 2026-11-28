@@ -7,7 +7,7 @@ import logging
 import secrets
 import re
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from threading import Event
 
@@ -83,6 +83,11 @@ class ActivationIn(BaseModel):
     password: str = Field(max_length=256)
 
 
+class ConversationUpdate(BaseModel):
+    title: str | None = None
+    pinned: bool | None = None
+
+
 class AskIn(BaseModel):
     question: str = Field(default="", max_length=MAX_USER_CHARS)
     conversation_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
@@ -93,11 +98,19 @@ class EmployeeIn(BaseModel):
     name: str = ""
     designation: str = ""
     is_admin: bool = False
+    employee_type: str | None = None
+    is_permanent: bool | None = None
+    medical_plan: str | None = None
+    joined_on: str | None = None
 
 
 class RoleIn(BaseModel):
     designation: str = ""
     is_admin: bool = False
+    employee_type: str | None = None
+    is_permanent: bool | None = None
+    medical_plan: str | None = None
+    joined_on: str | None = None
 
 
 class PublishIn(BaseModel):
@@ -309,9 +322,34 @@ def register(app: FastAPI) -> None:
     @app.get("/api/conversations/{key}")
     def get_conversation(request: Request, key: str):
         employee = _require(request)
-        messages, hidden = _conversation(request, employee, key, _conversation_scope(request, employee))
-        return {"messages": [{"role": item["role"], "text": item["text"]} for item in messages],
-                "hiddenMessages": hidden}
+        messages = _stored_messages(request, employee, key)
+        scope = _conversation_scope(request, employee)
+        shown = stamp_message_times(
+            messages,
+            request.app.state.store.question_times(employee.email),
+            request.app.state.store.conversation_updated_at(employee.email, key),
+        )
+        return {"messages": [{"role": item["role"], "text": item["text"], "at": item.get("at")} for item in shown],
+                "followUpsClosed": follow_ups_closed(messages, scope, _today(request).isoformat())}
+
+    @app.patch("/api/conversations/{key}")
+    def update_conversation(request: Request, key: str, payload: ConversationUpdate):
+        employee = _require(request)
+        if not _TRACE_ID.fullmatch(key):
+            raise HTTPException(404, "That chat is no longer available.")
+        title = None
+        if payload.title is not None:
+            title = " ".join(payload.title.split())
+            if not title or len(title) > 70:
+                raise HTTPException(400, "Use a name of 70 characters or fewer.")
+        if title is None and payload.pinned is None:
+            raise HTTPException(400, "Nothing to change.")
+        saved = request.app.state.store.update_conversation(
+            employee.email, key, title=title, pinned=payload.pinned,
+        )
+        if saved is None:
+            raise HTTPException(404, "That chat is no longer available.")
+        return saved
 
     @app.delete("/api/conversations/{key}")
     def delete_conversation(request: Request, key: str):
@@ -484,8 +522,13 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, "Enter this person's name.")
         if designation not in ROLE_LABELS:
             raise HTTPException(400, "Choose a role.")
+        employee_type, is_permanent, medical_plan, joined_on, _joined_set = _employee_settings(payload)
         store = request.app.state.store
-        if not store.create_employee(email, name, designation, payload.is_admin, actor=admin.email):
+        if not store.create_employee(
+            email, name, designation, payload.is_admin, actor=admin.email,
+            employee_type=employee_type, is_permanent=is_permanent,
+            medical_plan=medical_plan, joined_on=joined_on,
+        ):
             raise HTTPException(400, "This email is already on the employee list.")
         employee = store.employee(email)
         return {
@@ -530,7 +573,12 @@ def register(app: FastAPI) -> None:
         admins = [item for item, _has_password in people if item.is_admin]
         if person.is_admin and not payload.is_admin and len(admins) <= 1:
             raise HTTPException(400, "Keep at least one admin.")
-        if not _change_employee(store.update_employee, target, designation, payload.is_admin, actor=admin.email):
+        employee_type, is_permanent, medical_plan, joined_on, joined_on_set = _employee_settings(payload)
+        if not _change_employee(
+            store.update_employee, target, designation, payload.is_admin, actor=admin.email,
+            employee_type=employee_type, is_permanent=is_permanent, medical_plan=medical_plan,
+            joined_on=joined_on, joined_on_set=joined_on_set,
+        ):
             raise HTTPException(404, "That email is not on the list.")
         fresh = store.employee(target)
         has_password = next(flag for item, flag in store.list_employees() if item.email == target)
@@ -599,7 +647,12 @@ def _ask_question(request: Request, payload: AskIn, cancelled: Event):
     employee = _require(request)
     store = request.app.state.store
     version = _conversation_scope(request, employee)
-    history, _ = _conversation(request, employee, payload.conversation_id, version) if payload.conversation_id else ([], 0)
+    history = []
+    if payload.conversation_id:
+        stored = _stored_messages(request, employee, payload.conversation_id)
+        if follow_ups_closed(stored, version, _today(request).isoformat()):
+            raise HTTPException(409, FOLLOW_UPS_CLOSED)
+        history = _history_for_model(stored)
     today = _today(request)
     lease = _budget(store, [("ask:team", TEAM_ASK_LIMIT, TEAM_ASK_WINDOW_S),
                             ("ask:daily", TEAM_DAILY_ASK_LIMIT, 86400),
@@ -618,14 +671,16 @@ def _ask_question(request: Request, payload: AskIn, cancelled: Event):
         raise HTTPException(409, "Policy access changed while we were answering. Ask again for the current policy.")
     citations = ([{"label": label} for label in dict.fromkeys(item.label for item in result.citations)]
                  if result.outcome == "answered" else [])
+    asked_at = datetime.now(timezone.utc).isoformat()
     if payload.conversation_id and result.outcome in {"answered", "dont_know", "refused", "clarification"}:
         store.append_exchange(employee.email, payload.conversation_id,
-                              {"role": "user", "text": payload.question.strip()},
+                              {"role": "user", "text": payload.question.strip(), "at": asked_at},
                               {"role": "assistant", "text": result.answer, "citations": citations, "scope": version,
                                "outcome": result.outcome,
                                "passage_ids": result.passage_ids,
-                               "expiresOn": result.valid_until.isoformat() if result.valid_until else None})
-    return {"answer": result.answer, "outcome": result.outcome, "citations": []}
+                               "expiresOn": result.valid_until.isoformat() if result.valid_until else None,
+                               "at": asked_at})
+    return {"answer": result.answer, "outcome": result.outcome, "citations": [], "at": asked_at}
 
 
 def _password_ok(password: str) -> bool:
@@ -638,9 +693,9 @@ def _limited(payload: bytes) -> bytes:
     return payload
 
 
-def _change_employee(action, *args, actor: str):
+def _change_employee(action, *args, actor: str, **kwargs):
     try:
-        return action(*args, actor=actor)
+        return action(*args, actor=actor, **kwargs)
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
     except ValueError as exc:
@@ -678,21 +733,58 @@ def _conversation_scope(request: Request, employee: Employee) -> str:
     return f"{employee.designation}:policy-roles-v1:{request.app.state.store.policy_version()}"
 
 
-def _conversation(request: Request, employee: Employee, key: str, scope: str) -> tuple[list[dict], int]:
+FOLLOW_UPS_CLOSED = "This chat is from before a policy or access change. Start a new chat to ask again."
+
+
+def exchange_closed(answer: dict, scope: str, today: str) -> bool:
+    return answer.get("scope") != scope or (answer.get("expiresOn") or today) < today
+
+
+def stamp_message_times(messages: list[dict], times: list[tuple[str, str]], fallback: str | None) -> list[dict]:
+    unused = list(times)
+    stamped = []
+    for index in range(0, len(messages) - 1, 2):
+        question, answer = messages[index], messages[index + 1]
+        when = question.get("at") or answer.get("at") or _matched_time(question.get("text") or "", unused) or fallback
+        stamped.append({**question, "at": when})
+        stamped.append({**answer, "at": when})
+    if len(messages) % 2:
+        last = messages[-1]
+        stamped.append({**last, "at": last.get("at") or fallback})
+    return stamped
+
+
+def _matched_time(question: str, unused: list[tuple[str, str]]) -> str | None:
+    wanted = question.strip().casefold()
+    if not wanted:
+        return None
+    for index, (text, when) in enumerate(unused):
+        if text.strip().casefold() == wanted:
+            unused.pop(index)
+            return when
+    return None
+
+
+def follow_ups_closed(messages: list[dict], scope: str, today: str) -> bool:
+    return any(exchange_closed(messages[index + 1], scope, today) for index in range(0, len(messages) - 1, 2))
+
+
+def _stored_messages(request: Request, employee: Employee, key: str) -> list[dict]:
     messages = request.app.state.store.conversation(employee.email, key) if _TRACE_ID.fullmatch(key) else None
     if messages is None:
         raise HTTPException(404, "That chat is no longer available.")
-    today = _today(request).isoformat()
-    visible = []
+    return messages
+
+
+def _history_for_model(messages: list[dict]) -> list[dict]:
+    history = []
     for index in range(0, len(messages) - 1, 2):
         question, answer = messages[index:index + 2]
-        if answer.get("scope") != scope or (answer.get("expiresOn") or today) < today:
-            continue
-        visible.append({"role": question["role"], "text": question["text"]})
-        visible.append({"role": answer["role"], "text": answer["text"],
+        history.append({"role": question["role"], "text": question["text"]})
+        history.append({"role": answer["role"], "text": answer["text"],
                         "citations": answer.get("citations", []), "outcome": answer.get("outcome"),
                         "passage_ids": answer.get("passage_ids", [])})
-    return visible, len(messages) - len(visible)
+    return history
 
 
 def _current(request: Request) -> Employee | None:
@@ -846,6 +938,33 @@ def _session_response(store, employee: Employee):
     return response
 
 
+def _employee_settings(payload) -> tuple:
+    employee_type = (payload.employee_type or "").strip().lower() or None
+    if employee_type is not None and employee_type not in {"head_office", "retail"}:
+        raise HTTPException(400, "Choose a place of work.")
+    medical_plan = None if payload.medical_plan is None else payload.medical_plan.strip().lower()
+    if medical_plan is not None and medical_plan not in {"", "a", "b", "c", "d", "e"}:
+        raise HTTPException(400, "Choose a medical plan.")
+    joined_on = None
+    joined_on_set = payload.joined_on is not None
+    if payload.joined_on:
+        try:
+            joined_on = date.fromisoformat(payload.joined_on.strip())
+        except ValueError:
+            raise HTTPException(400, "Enter a valid joining date.")
+    return employee_type, payload.is_permanent, medical_plan, joined_on, joined_on_set
+
+
+def _employee_fields(employee: Employee) -> dict:
+    return {
+        "employeeType": employee.employee_type,
+        "place": "Retail store" if employee.employee_type == "retail" else "Head office",
+        "isPermanent": bool(employee.is_permanent),
+        "medicalPlan": employee.medical_plan or "",
+        "joinedOn": employee.joined_on.isoformat() if employee.joined_on else "",
+    }
+
+
 def _employee_row(employee: Employee, has_password: bool) -> dict:
     return {
         "email": employee.email,
@@ -854,6 +973,7 @@ def _employee_row(employee: Employee, has_password: bool) -> dict:
         "role": role_label(employee.designation),
         "isAdmin": employee.is_admin,
         "hasPassword": has_password,
+        **_employee_fields(employee),
     }
 
 
@@ -864,6 +984,7 @@ def _person(employee: Employee) -> dict:
         "designation": employee.designation,
         "role": role_label(employee.designation),
         "isAdmin": employee.is_admin,
+        **_employee_fields(employee),
     }
 
 
@@ -888,6 +1009,8 @@ def _question_row(trace) -> dict:
         "id": trace.id,
         "question": trace.question or "Blocked or empty question",
         "asked_by": f"{trace.name}, {role_label(trace.designation)}",
+        "email": trace.email,
+        "answer": trace.answer,
         "outcome_label": labels.get(trace.outcome, "Could not finish"),
         "policy": policy,
         "when": trace.created_at,

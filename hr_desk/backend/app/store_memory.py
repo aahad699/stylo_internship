@@ -35,6 +35,7 @@ class MemoryStore:
         self.activations = {}
         self.budget = {}
         self.conversations = {}
+        self.conversation_meta = {}
         self.drafts = {}
         self.archived = {}
         self.jobs = {}
@@ -156,9 +157,52 @@ class MemoryStore:
         return key
 
     def list_conversations(self, email):
-        return [{"id": key, "title": messages[0]["text"][:70] if messages else "New chat",
-                 "updatedAt": utc_now()}
-                for (owner, key), messages in self.conversations.items() if owner == email]
+        rows = []
+        for (owner, key), messages in self.conversations.items():
+            if owner != email:
+                continue
+            meta = self.conversation_meta.get((owner, key), {})
+            custom = (meta.get("title") or "").strip()
+            if custom:
+                title = custom[:70]
+            elif messages and messages[0].get("text"):
+                title = messages[0]["text"][:70]
+            else:
+                title = "New chat"
+            rows.append({
+                "id": key,
+                "title": title,
+                "updatedAt": meta.get("updatedAt") or utc_now(),
+                "pinned": bool(meta.get("pinned")),
+                "pinnedAt": meta.get("pinnedAt") or "",
+            })
+        rows.sort(key=lambda row: (row["pinned"], row["pinnedAt"], row["updatedAt"]), reverse=True)
+        pinned = [row for row in rows if row["pinned"]]
+        unpinned = [row for row in rows if not row["pinned"]][:20]
+        return [{key: row[key] for key in ("id", "title", "updatedAt", "pinned")} for row in [*pinned, *unpinned]]
+
+    def update_conversation(self, email, key, *, title=None, pinned=None):
+        if (email, key) not in self.conversations or (title is None and pinned is None):
+            return None
+        meta = self.conversation_meta.setdefault((email, key), {})
+        if title is not None:
+            meta["title"] = title
+        if pinned is True:
+            meta["pinned"] = True
+            meta["pinnedAt"] = meta.get("pinnedAt") or utc_now()
+        elif pinned is False:
+            meta["pinned"] = False
+            meta["pinnedAt"] = ""
+        found = next((row for row in self.list_conversations(email) if row["id"] == key), None)
+        return found
+
+    def conversation_updated_at(self, email, key):
+        return utc_now() if (email, key) in self.conversations else None
+
+    def question_times(self, email):
+        rows = [trace for trace in self.traces.values() if trace.email == email]
+        rows.sort(key=lambda trace: trace.created_at)
+        return [(trace.question or "", trace.created_at) for trace in rows]
 
     def conversation(self, email, key):
         return self.conversations.get((email, key))
@@ -170,6 +214,7 @@ class MemoryStore:
                 self.conversations[(email, key)] = [*messages, user, answer][-CHAT_MAX_MESSAGES:]
 
     def delete_conversation(self, email, key):
+        self.conversation_meta.pop((email, key), None)
         return self.conversations.pop((email, key), None) is not None
 
 
@@ -179,11 +224,16 @@ class MemoryStore:
     def add_employee(self, email: str, name: str, designation: str, is_admin: bool = False) -> None:
         self.employees[email] = Employee(email, name, designation, is_admin)
 
-    def create_employee(self, email: str, name: str, designation: str, is_admin: bool = False, *, actor=None) -> bool:
+    def create_employee(
+        self, email: str, name: str, designation: str, is_admin: bool = False, *, actor=None,
+        employee_type=None, is_permanent=None, medical_plan=None, joined_on=None,
+    ) -> bool:
         with self._lock:
             if email in self.employees:
                 return False
-            self.employees[email] = Employee(email, name, designation, is_admin)
+            self.employees[email] = Employee(
+                email, name, designation, is_admin, employee_type, is_permanent, medical_plan, joined_on,
+            )
             if actor:
                 self.actions.append({"id": uuid4().hex, "created_at": utc_now(), "email": actor,
                                      "action": "added an email", "detail": email})
@@ -215,6 +265,7 @@ class MemoryStore:
             self.password_hashes.pop(email, None)
             self.activations.pop(email, None)
             self.conversations = {key: value for key, value in self.conversations.items() if key[0] != email}
+            self.conversation_meta = {key: value for key, value in self.conversation_meta.items() if key[0] != email}
             self.sessions = {
                 token: row for token, row in self.sessions.items() if row[0] != email
             }
@@ -223,12 +274,21 @@ class MemoryStore:
                                      "action": "removed an email", "detail": email})
             return True
 
-    def update_employee(self, email: str, designation: str, is_admin: bool, *, actor=None) -> bool:
+    def update_employee(
+        self, email: str, designation: str, is_admin: bool, *, actor=None,
+        employee_type=None, is_permanent=None, medical_plan=None, joined_on=None, joined_on_set=False,
+    ) -> bool:
         with self._lock:
             current = self.employees.get(email)
             if current is None:
                 return False
-            self.employees[email] = Employee(email, current.name, designation, is_admin)
+            self.employees[email] = Employee(
+                email, current.name, designation, is_admin,
+                employee_type if employee_type is not None else current.employee_type,
+                is_permanent if is_permanent is not None else current.is_permanent,
+                medical_plan if medical_plan is not None else current.medical_plan,
+                joined_on if joined_on_set else current.joined_on,
+            )
             if actor:
                 self.actions.append({"id": uuid4().hex, "created_at": utc_now(), "email": actor,
                                      "action": "changed employee access", "detail": email})
@@ -480,6 +540,25 @@ class MemoryStore:
         return next((row for row in reversed(self.cache)
                      if row.get("access_key") == access and row.get("policy_version") == version
                      and row.get("question") == question and row.get("created_at", cutoff) > cutoff), None)
+
+    def cache_lookup_similar(self, embedding, access, version, question):
+        from .config import CACHE_SIMILARITY
+        from .embeddings import cosine
+        from .rewrite import same_subject
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=CACHE_TTL_MINUTES)
+        best = None
+        best_score = 0.0
+        for row in self.cache:
+            vector = row.get("embedding")
+            if (row.get("access_key") != access or row.get("policy_version") != version
+                    or not vector or row.get("created_at", cutoff) <= cutoff):
+                continue
+            score = cosine(embedding, vector)
+            if score >= CACHE_SIMILARITY and score > best_score and same_subject(question, row.get("question", "")):
+                best = row
+                best_score = score
+        return best
 
     def cache_store(self, row):
         with self._lock:

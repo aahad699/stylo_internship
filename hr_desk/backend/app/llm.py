@@ -33,9 +33,8 @@ _CLASSIFIER_SYSTEM = (
 )
 
 _REWRITE_SYSTEM = (
-    "Rewrite the latest employee question as one standalone policy question. "
-    "Use the earlier turns only when the new message is a follow-up. "
-    "If the topic changed, ignore the earlier turns. "
+    "Rewrite the latest employee question as one standalone policy question "
+    "that includes the earlier turns. "
     "Reply with the question only."
 )
 _PERSONAL_SEARCH_SYSTEM = (
@@ -234,7 +233,9 @@ class OpenAIBackend:
         )
         return Completion(text=text, tokens_in=tokens_in, tokens_out=tokens_out)
 
-    def answer_topics(self, *, system: str, topics: list[TopicEvidence], model: str, max_tokens: int) -> Completion:
+    def answer_topics(
+        self, *, system: str, topics: list[TopicEvidence], model: str, max_tokens: int, background: str = "",
+    ) -> Completion:
         return self._chat(
             model=model,
             messages=[
@@ -246,7 +247,7 @@ class OpenAIBackend:
                     "about the beginning of a process, stop after the first step or steps. An echoed title alone is "
                     "not an answer. Do not repeat the topic heading or reveal evidence labels."
                 )},
-                {"role": "user", "content": grouped_user_message(topics)},
+                {"role": "user", "content": grouped_user_message(topics, background)},
             ],
             max_tokens=max_tokens,
             temperature=TEMPERATURE_ANSWER,
@@ -258,7 +259,9 @@ class OpenAIBackend:
         messages = [{**item, "content": chat_system_prompt(item["content"])}
                     if item["role"] == "system" else item for item in messages]
         options = {"max_completion_tokens": max_tokens}
-        if model.startswith("gpt-5"):
+        if model.startswith("gpt-6"):
+            options["reasoning_effort"] = "none"
+        elif model.startswith("gpt-5"):
             options["reasoning_effort"] = "minimal" if model.startswith(("gpt-5-nano", "gpt-5-mini")) else "low"
         else:
             options["temperature"] = temperature

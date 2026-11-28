@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import re
+from contextvars import ContextVar
 
 from .textutil import _stem, matched_tokens, token_set
 
 ROLE_LABELS = {
     "intern": "Intern",
+    "contract": "Contract",
     "employee": "Employee",
     "manager": "Manager",
     "hr": "HR",
@@ -66,8 +68,9 @@ assistant_store_manager branch_accountant head_hr
 """.split())
 # Store staff work in retail and the Travel Policy calls RSMs and ASMs field-based,
 # so none of them is a Head Office (RSC) employee.
+# Intern (L1), Contract (C), and trainees are not permanent employees.
 _HEAD_OFFICE_ROLES = set(ROLE_LABELS) - set("""
-intern trainee salesman senior_store_manager store_manager assistant_store_manager branch_accountant
+intern contract trainee salesman senior_store_manager store_manager assistant_store_manager branch_accountant
 regional_sales_manager area_sales_manager
 """.split())
 
@@ -83,7 +86,7 @@ def reference_audience(title: str) -> str:
     return "everyone"
 
 
-_LOW_TRAVEL = {"senior_executive", "executive", "officer"}
+_LOW_TRAVEL = {"senior_executive", "executive", "officer", "assistant_manager", "manager"}
 _SM_AGM = {"senior_manager", "assistant_general_manager"}
 # Annexure B grade labels. Plan A's "HEAD" and "Higher Management" take in the
 # DGM, the group chief and the head of HR; "Assistant" in Plan B is the assistant
@@ -100,6 +103,48 @@ _PLANS = {
 
 def has_medical_plan(designation: str) -> bool:
     return any(designation in roles for roles in _PLANS.values())
+
+
+# Store staff and field sales start as retail. Intern, contract, and trainee start as not permanent.
+_RETAIL_ROLES = {
+    "salesman", "senior_store_manager", "store_manager", "assistant_store_manager",
+    "branch_accountant", "regional_sales_manager", "area_sales_manager",
+}
+_TEMPORARY_ROLES = {"intern", "contract", "trainee"}
+_employee_access: ContextVar[tuple[str, bool] | None] = ContextVar("hr_desk_employee_access", default=None)
+
+
+def default_employee_type(designation: str) -> str:
+    return "retail" if designation in _RETAIL_ROLES else "head_office"
+
+
+def default_is_permanent(designation: str) -> bool:
+    return designation not in _TEMPORARY_ROLES
+
+
+def default_medical_plan(designation: str) -> str:
+    for letter, roles in _PLANS.items():
+        if designation in roles:
+            return letter
+    return ""
+
+
+def bind_employee_access(employee) -> object:
+    """The ask in progress. Passage checks read the stored place of work and permanence."""
+    return _employee_access.set((employee.employee_type, bool(employee.is_permanent)))
+
+
+def reset_employee_access(token) -> None:
+    _employee_access.reset(token)
+
+
+def _resolved_access(designation: str, employee_type, is_permanent) -> tuple[str, bool]:
+    bound = _employee_access.get()
+    if employee_type is None:
+        employee_type = bound[0] if bound else default_employee_type(designation)
+    if is_permanent is None:
+        is_permanent = bound[1] if bound else default_is_permanent(designation)
+    return employee_type, bool(is_permanent)
 
 
 _LABEL = re.compile(r"(?:^|[.\n]\s*)(?:grade entitlement|grade):\s*([^\.\n]+)", re.I)
@@ -170,6 +215,39 @@ def pack_audiences(roles: list[str]) -> str:
     return ",".join(role for role in AUDIENCES if role in cleaned)
 
 
+def policy_visible_to(
+    designation: str, title: str, audience: str, *, employee_type: str | None = None, is_permanent: bool | None = None,
+) -> bool:
+    """Provident and advance salary open for a permanent head-office employee. Travel and medical stay closed when the employee is not permanent."""
+    if designation == "hr":
+        return True
+    employee_type, is_permanent = _resolved_access(designation, employee_type, is_permanent)
+    folded = (title or "").casefold()
+    roles = {part for part in (audience or "").split(",") if part}
+    if "provident" in folded or "advance" in folded:
+        return is_permanent and employee_type == "head_office"
+    # An admin who ticks Intern, Contract, or Trainee on that document opens it. A saved role
+    # inside the default audience does not make a non-permanent employee permanent.
+    opened = designation in _TEMPORARY_ROLES and designation in roles and "everyone" not in roles
+    if not is_permanent and any(name in folded for name in ("travel", "medical")) and not opened:
+        return False
+    return shares_audience(audience, set(allowed_audiences(designation)))
+
+
+def grade_row_allows(designation: str, heading: str, body: str, title: str, content_type: str) -> bool:
+    """A grade row stays with the grades it names, in either the short or full form."""
+    if designation == "hr" or content_type != "table":
+        return True
+    exact = policy_row_roles(heading, body, title)
+    if exact is not None:
+        return designation in exact
+    text = f"{heading} {body}"
+    if not re.search(r"\bgrade\b", text, re.I):
+        return True
+    found = named_grades(text)
+    return not found or designation in found
+
+
 def shares_audience(stored: str, allowed: set[str]) -> bool:
     roles = {part for part in (stored or "").split(",") if part}
     return bool(roles & allowed)
@@ -183,8 +261,11 @@ def allowed_audiences(designation: str) -> tuple[str, ...]:
     return ("everyone",)
 
 
-def access_key(designation: str) -> str:
-    raw = "|".join(allowed_audiences(designation))
+def access_key(
+    designation: str, employee_type: str | None = None, is_permanent: bool | None = None,
+) -> str:
+    employee_type, is_permanent = _resolved_access(designation, employee_type, is_permanent)
+    raw = "|".join(allowed_audiences(designation)) + f"|{employee_type}|{int(is_permanent)}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -312,6 +393,8 @@ _GRADE_NAMES = [
         ((re.escape(label.casefold()), {role}) for role, label in ROLE_LABELS.items() if role not in {"employee", "hr"}),
         key=lambda item: -len(item[0]),
     ),
+    (r"intern\s*\(\s*l1\s*\)", {"intern"}),
+    (r"contract(?:ual)?(?:\s+employees?)?(?:\s*\(\s*c\s*\))?", {"contract"}),
     (r"salesmen", {"salesman"}),
     (r"coo", {"coo_business"}),
     *((name, {role}) for name, role in (
@@ -376,13 +459,20 @@ _POLICY_SCOPES = (
 
 def _boundary(designation: str, title: str, outside_audience: bool) -> str:
     """outside_audience: the policy itself is closed to this role, not just a grade row."""
-    if designation != "intern" and not outside_audience:
-        return "I can't share that. It is written for a different grade, and your role doesn't include that grade."
+    employee_type, is_permanent = _resolved_access(designation, None, None)
     folded = title.lower()
     who = "an internship" if designation == "intern" else f"the {role_label(designation)} designation"
     for marker, scope in _POLICY_SCOPES:
-        if marker in folded:
+        if marker not in folded:
+            continue
+        if marker in {"provident", "advance"}:
+            closed = not (is_permanent and employee_type == "head_office")
+        else:
+            closed = not is_permanent
+        if closed or designation == "intern" or outside_audience:
             return f"I can't share {scope}, and {who} is outside that group."
+    if designation != "intern" and not outside_audience:
+        return "I can't share that. It is written for a different grade, and your role doesn't include that grade."
     if designation == "intern":
         return "I can't share that. An internship doesn't include this policy."
     return f"I can't share that. The {title} isn't open to the {role_label(designation)} designation. Ask HR if it should be."
@@ -398,12 +488,12 @@ def can_see_passage(
 ) -> bool:
     if designation == "hr":
         return True
+    _, is_permanent = _resolved_access(designation, None, None)
     roles = {part for part in (audience or "").split(",") if part}
     label = f"{title} {heading}".lower()
-    # The six company policies are marked for everyone, and an intern is outside
-    # four of them. An admin who ticks Intern on that document opens it.
-    opened_to_intern = "intern" in roles and "everyone" not in roles
-    if designation in {"intern", "trainee"} and any(name in label for name in _NOT_FOR_INTERN) and not opened_to_intern:
+    # An admin who ticks Intern, Contract, or Trainee on that document opens it.
+    opened = designation in _TEMPORARY_ROLES and designation in roles and "everyone" not in roles
+    if not is_permanent and any(name in label for name in _NOT_FOR_INTERN) and not opened:
         return False
     if content_type == "table":
         exact = policy_row_roles(heading, body, title)

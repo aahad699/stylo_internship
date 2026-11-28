@@ -9,8 +9,15 @@ from datetime import date, datetime
 
 from psycopg.types.json import Jsonb
 
-from .access import passage_grades, query_role, reference_audience
-from .config import SESSION_HOURS, CACHE_MAX_ROWS, CACHE_TTL_MINUTES
+from .access import (
+    default_employee_type,
+    default_is_permanent,
+    default_medical_plan,
+    passage_grades,
+    query_role,
+    reference_audience,
+)
+from .config import CACHE_SIMILARITY, SESSION_HOURS, CACHE_MAX_ROWS, CACHE_TTL_MINUTES
 from .operations import PostgresOperations, SCHEMA as OPERATIONS_SCHEMA, complete_policy_job, digest
 from .models import ChunkDraft, Employee, Passage, PolicyDraft, TraceRecord
 
@@ -106,6 +113,7 @@ class PostgresStore(PostgresOperations):
         self._conn = self._connect(bootstrap=migrate)
         if migrate:
             self._migrate()
+        self._ensure_employee_fields()
 
     def _connect(self, *, bootstrap=False):
         import psycopg
@@ -217,6 +225,65 @@ class PostgresStore(PostgresOperations):
             if converged:
                 cur.execute("DELETE FROM answer_cache")
 
+    def _ensure_employee_fields(self) -> None:
+        """Add the employee settings and the cache embedding. Does not rewrite policy audiences."""
+        with self._lock, self.conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.employees')")
+            if cur.fetchone()[0] is None:
+                return
+            cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_type TEXT")
+            cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_permanent BOOLEAN")
+            cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS medical_plan TEXT")
+            cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS joined_on DATE")
+            cur.execute(
+                """
+                SELECT email, designation FROM employees
+                WHERE employee_type IS NULL OR is_permanent IS NULL OR medical_plan IS NULL
+                """
+            )
+            for email, designation in cur.fetchall():
+                cur.execute(
+                    """
+                    UPDATE employees
+                    SET employee_type = COALESCE(employee_type, %s),
+                        is_permanent = COALESCE(is_permanent, %s),
+                        medical_plan = COALESCE(medical_plan, %s)
+                    WHERE email = %s
+                    """,
+                    (
+                        default_employee_type(designation),
+                        default_is_permanent(designation),
+                        default_medical_plan(designation),
+                        email,
+                    ),
+                )
+            cur.execute("ALTER TABLE employees ALTER COLUMN employee_type SET NOT NULL")
+            cur.execute("ALTER TABLE employees ALTER COLUMN is_permanent SET NOT NULL")
+            cur.execute("ALTER TABLE employees ALTER COLUMN medical_plan SET NOT NULL")
+            cur.execute("ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_employee_type_check")
+            cur.execute(
+                """
+                ALTER TABLE employees ADD CONSTRAINT employees_employee_type_check
+                CHECK (employee_type IN ('head_office', 'retail'))
+                """
+            )
+            cur.execute("ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_medical_plan_check")
+            cur.execute(
+                """
+                ALTER TABLE employees ADD CONSTRAINT employees_medical_plan_check
+                CHECK (medical_plan IN ('', 'a', 'b', 'c', 'd', 'e'))
+                """
+            )
+            cur.execute("SELECT to_regclass('public.conversations')")
+            if cur.fetchone()[0] is not None:
+                cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title TEXT")
+                cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE")
+                cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ")
+            cur.execute("SELECT to_regclass('public.answer_cache'), to_regtype('vector')")
+            cache_table, vector_type = cur.fetchone()
+            if cache_table is not None and vector_type is not None:
+                cur.execute("ALTER TABLE answer_cache ADD COLUMN IF NOT EXISTS embedding vector(1536)")
+
     def ping(self) -> None:
         with self._lock, self.conn.cursor() as cur:
             cur.execute("SELECT revision FROM library_revision WHERE singleton")
@@ -226,7 +293,10 @@ class PostgresStore(PostgresOperations):
     def employee(self, email: str) -> Employee | None:
         with self._lock, self.conn.cursor() as cur:
             cur.execute(
-                "SELECT email, name, designation, is_admin FROM employees WHERE email = %s",
+                """
+                SELECT email, name, designation, is_admin, employee_type, is_permanent, medical_plan, joined_on
+                FROM employees WHERE email = %s
+                """,
                 (email,),
             )
             row = cur.fetchone()
@@ -246,26 +316,38 @@ class PostgresStore(PostgresOperations):
         with self._lock, self.conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT email, name, designation, is_admin,
+                SELECT email, name, designation, is_admin, employee_type, is_permanent,
+                       medical_plan, joined_on,
                        password_hash IS NOT NULL AND password_hash <> ''
                 FROM employees
                 ORDER BY name, email
                 """
             )
             return [
-                (Employee(row[0], row[1], row[2], bool(row[3])), bool(row[4]))
+                (Employee(row[0], row[1], row[2], bool(row[3]), row[4], bool(row[5]), row[6], row[7]), bool(row[8]))
                 for row in cur.fetchall()
             ]
 
-    def create_employee(self, email: str, name: str, designation: str, is_admin: bool = False, *, actor: str | None = None) -> bool:
+    def create_employee(
+        self, email: str, name: str, designation: str, is_admin: bool = False, *, actor: str | None = None,
+        employee_type: str | None = None, is_permanent: bool | None = None,
+        medical_plan: str | None = None, joined_on: date | None = None,
+    ) -> bool:
+        person = Employee(
+            email, name, designation, is_admin, employee_type, is_permanent, medical_plan, joined_on,
+        )
         with self._lock, self.conn.cursor() as cur, self.conn.transaction():
             cur.execute(
                 """
-                INSERT INTO employees (email, name, designation, is_admin)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO employees
+                  (email, name, designation, is_admin, employee_type, is_permanent, medical_plan, joined_on)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (email) DO NOTHING
                 """,
-                (email, name, designation, is_admin),
+                (
+                    email, name, designation, is_admin, person.employee_type, person.is_permanent,
+                    person.medical_plan, person.joined_on,
+                ),
             )
             changed = cur.rowcount == 1
             if changed and actor:
@@ -283,17 +365,28 @@ class PostgresStore(PostgresOperations):
                 _audit(cur, actor, "removed an email", email)
             return changed
 
-    def update_employee(self, email: str, designation: str, is_admin: bool, *, actor=None) -> bool:
+    def update_employee(
+        self, email: str, designation: str, is_admin: bool, *, actor=None,
+        employee_type: str | None = None, is_permanent: bool | None = None,
+        medical_plan: str | None = None, joined_on: date | None = None, joined_on_set: bool = False,
+    ) -> bool:
         with self._lock, self.conn.cursor() as cur, self.conn.transaction():
             if actor:
                 _assert_admin_change(cur, actor, email, is_admin)
             cur.execute(
                 """
                 UPDATE employees
-                SET designation = %s, is_admin = %s
+                SET designation = %s, is_admin = %s,
+                    employee_type = COALESCE(%s, employee_type),
+                    is_permanent = COALESCE(%s, is_permanent),
+                    medical_plan = COALESCE(%s, medical_plan),
+                    joined_on = CASE WHEN %s THEN %s ELSE joined_on END
                 WHERE email = %s
                 """,
-                (designation, is_admin, email),
+                (
+                    designation, is_admin, employee_type, is_permanent, medical_plan,
+                    joined_on_set, joined_on, email,
+                ),
             )
             changed = cur.rowcount == 1
             if changed and actor:
@@ -338,7 +431,8 @@ class PostgresStore(PostgresOperations):
             )
             cur.execute(
                 """
-                SELECT e.email, e.name, e.designation, e.is_admin
+                SELECT e.email, e.name, e.designation, e.is_admin,
+                       e.employee_type, e.is_permanent, e.medical_plan, e.joined_on
                 FROM sessions s
                 JOIN employees e ON e.email = s.email
                 WHERE s.token = %s
@@ -793,6 +887,28 @@ class PostgresStore(PostgresOperations):
             row = cur.fetchone()
         return {"answer": row[0], "citations": row[1], "outcome": row[2]} if row else None
 
+    def cache_lookup_similar(self, embedding: list[float], access: str, version: str, question: str) -> dict | None:
+        from .rewrite import same_subject
+
+        vector = _vector(embedding)
+        with self._lock, self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT answer, citations, outcome, question, 1 - (embedding <=> %s) AS score
+                FROM answer_cache
+                WHERE access_key = %s AND policy_version = %s AND embedding IS NOT NULL
+                  AND created_at > now() - make_interval(mins => %s)
+                ORDER BY embedding <=> %s
+                LIMIT 8
+                """,
+                (vector, access, version, CACHE_TTL_MINUTES, vector),
+            )
+            rows = cur.fetchall()
+        for answer, citations, outcome, stored, score in rows:
+            if score >= CACHE_SIMILARITY and same_subject(question, stored):
+                return {"answer": answer, "citations": citations, "outcome": outcome}
+        return None
+
     def cache_store(self, row: dict) -> None:
         with self._lock, self.conn.cursor() as cur, self.conn.transaction():
             cur.execute("SELECT pg_advisory_xact_lock(490622358)")
@@ -806,11 +922,12 @@ class PostgresStore(PostgresOperations):
             cur.execute(
                 """
                 INSERT INTO answer_cache
-                  (id, access_key, policy_version, question, answer, citations, outcome)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                  (id, access_key, policy_version, question, answer, citations, outcome, embedding)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (row["id"], row["access_key"], row["policy_version"],
-                 row["question"], row["answer"], Jsonb(row["citations"]), row["outcome"]),
+                 row["question"], row["answer"], Jsonb(row["citations"]), row["outcome"],
+                 _vector(row["embedding"]) if row.get("embedding") else None),
             )
             cur.execute(
                 "DELETE FROM answer_cache WHERE id IN (SELECT id FROM answer_cache ORDER BY created_at DESC, id OFFSET %s)",

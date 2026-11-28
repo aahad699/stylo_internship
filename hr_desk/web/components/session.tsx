@@ -7,6 +7,7 @@ type SessionValue = {
   loading: boolean;
   localPasswordSetup: boolean;
   me: Person | null;
+  farewell: string;
   loadError: string;
   retry: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -21,6 +22,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [localPasswordSetup, setLocalPasswordSetup] = useState(false);
   const [me, setMe] = useState<Person | null>(null);
+  const [farewell, setFarewell] = useState("");
   const [loadError, setLoadError] = useState("");
 
   async function refresh() {
@@ -44,6 +46,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+    setFarewell("");
     setMe(data.me);
   }
 
@@ -52,6 +55,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       body: JSON.stringify({ token, password }),
     });
+    setFarewell("");
     setMe(data.me);
   }
 
@@ -60,16 +64,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+    setFarewell("");
     setMe(data.me);
   }
 
   async function signOut() {
+    const first = (me?.name || "").trim().split(/\s+/)[0] || "";
     await api("/api/sign-out", { method: "POST" });
     setMe(null);
+    setFarewell(first);
   }
 
   return (
-    <SessionContext.Provider value={{ loading, localPasswordSetup, me, loadError, retry: refresh, signIn, setInitialPassword, activate, signOut }}>
+    <SessionContext.Provider value={{ loading, localPasswordSetup, me, farewell, loadError, retry: refresh, signIn, setInitialPassword, activate, signOut }}>
       {children}
     </SessionContext.Provider>
   );

@@ -8,7 +8,15 @@ const GRADE_ROW = /Grade:\s*(.+?)\.\s*Competent Authority:\s*([^.]*)/gi;
 const FIELD = /^([^:\n]{2,60}):\s+(\S.*)$/;
 const APPROVAL = /^(.+?)\s+[—–-]\s+approved by\s+(.+)$/i;
 
-export function formatAnswer(raw: string, labels: string[] = []): AnswerBlock[] {
+const SHARED_GRADES = [
+  ["Assistant Manager", "Manager"],
+  ["Assistant General Manager", "Senior Manager"],
+  ["Deputy General Manager", "General Manager"],
+  ["COO (Business)", "Group Chief"],
+];
+
+export function formatAnswer(raw: string, labels: string[] = [], roleLabel = ""): AnswerBlock[] {
+  raw = plainWording(raw, roleLabel);
   const blocks: AnswerBlock[] = [];
   for (const part of splitTables(raw)) {
     if (part.kind === "table") {
@@ -83,12 +91,12 @@ function blocksFromProse(raw: string, labels: string[]): AnswerBlock[] {
     if (fields.length === 0) return;
     const caption = takeCaption(blocks);
     if (fields.length >= 2) {
-      blocks.push({
-        type: "table",
-        caption,
-        headers: ["Item", "Details"],
-        rows: fields.map(([label, value]) => [label, value]),
-      });
+      const rows = fields
+        .map(([label, value]) => [displayItem(label), displayDetail(value)])
+        .filter((row) => row[0] && row[1]);
+      if (rows.length > 0) {
+        blocks.push({ type: "table", caption, headers: ["Item", "Details"], rows });
+      }
     } else {
       if (caption) blocks.push({ type: "paragraph", text: `${caption}:` });
       const [label, value] = fields[0];
@@ -119,6 +127,7 @@ function blocksFromProse(raw: string, labels: string[]): AnswerBlock[] {
         continue;
       }
       flushFields();
+      if (isTablePointer(sentence)) continue;
       blocks.push({ type: "paragraph", text: sentence });
     }
   }
@@ -130,12 +139,11 @@ function blocksFromProse(raw: string, labels: string[]): AnswerBlock[] {
 function tableFromItems(items: string[], caption: string): (AnswerBlock & { type: "table" }) | null {
   const fields = items.map((item) => item.match(FIELD));
   if (fields.every(Boolean) && items.length >= 2) {
-    return {
-      type: "table",
-      caption,
-      headers: ["Item", "Details"],
-      rows: fields.map((match) => [tidy(match?.[1] ?? ""), tidy(match?.[2] ?? "")]),
-    };
+    const rows = fields
+      .map((match) => [displayItem(match?.[1] ?? ""), displayDetail(match?.[2] ?? "")])
+      .filter((row) => row[0] && row[1]);
+    if (rows.length === 0) return null;
+    return { type: "table", caption, headers: ["Item", "Details"], rows };
   }
   const approvals = items.map((item) => item.match(APPROVAL));
   if (approvals.every(Boolean) && items.length >= 1) {
@@ -198,9 +206,60 @@ function pullRows(raw: string): Array<{ kind: "text" | "row"; text: string }> {
 
 function sentences(text: string): string[] {
   return text
-    .split(/(?<!\d\.)(?<=[.!?])\s+/)
+    .split(/(?<!\d\.)(?<!\b(?:Rs|Sr|Mr|Ms|Dr)\.)(?<=[.!?])\s+/)
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+const FULL_FORMS: Array<[RegExp, string]> = [
+  [/\bAGM\b/g, "Assistant General Manager"],
+  [/\bDGM\b/g, "Deputy General Manager"],
+  [/\bHOD\b/g, "Head of Department"],
+  [/\bESS\b/g, "Employee Self Service"],
+  [/\bSOP\b/g, "standard operating procedure"],
+  [/\bCOO\b/g, "Chief Operating Officer"],
+  [/\bCEO\b/g, "Chief Executive Officer"],
+  [/\bCFO\b/g, "Chief Financial Officer"],
+  [/\bHR\b/g, "Human Resources"],
+  [/\bPF\b/g, "Provident Fund"],
+  [/\bTA\b/g, "Travel Allowance"],
+  [/\bDA\b/g, "Daily Allowance"],
+  [/\bGC\b/g, "Group Chief"],
+  [/\bGM\b/g, "General Manager"],
+  [/\bSM\b/g, "Senior Manager"],
+  [/\bSE\b/g, "Senior Executive"],
+  [/\bAM\b/g, "Assistant Manager"],
+  [/\bkm\b/gi, "kilometers"],
+];
+
+function plainWording(raw: string, roleLabel: string): string {
+  let text = raw
+    .replace(/\bRs\.?\s*(?:\n+\s*)?(?=\d)/gi, "Rs.")
+    .replace(/\b([A-Za-z][A-Za-z ]{2,48}?)\s*\([A-Z]{2,5}\)/g, "$1");
+  for (const [pattern, full] of FULL_FORMS) text = text.replace(pattern, full);
+  if (roleLabel) {
+    for (const band of SHARED_GRADES) {
+      if (!band.includes(roleLabel)) continue;
+      for (const other of band) {
+        if (other === roleLabel) continue;
+        const left = new RegExp(`\\b${escapeReg(roleLabel)}\\b\\s*(?:&|and|to)\\s*${escapeReg(other)}\\b`, "gi");
+        const right = new RegExp(`\\b${escapeReg(other)}\\b\\s*(?:&|and|to)\\s*${escapeReg(roleLabel)}\\b`, "gi");
+        text = text.replace(left, roleLabel).replace(right, roleLabel);
+      }
+    }
+  }
+  return text
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || /[.!?:;]$/.test(trimmed)) return line;
+      return `${line.replace(/\s+$/, "")}.`;
+    })
+    .join("\n");
+}
+
+function escapeReg(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function isHeadingEcho(sentence: string, labels: string[]): boolean {
@@ -217,6 +276,19 @@ function plain(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function displayItem(label: string): string {
+  return tidy(label.replace(/^\d+(?:\.\d+)*\.?\s+/, ""));
+}
+
+function isTablePointer(value: string): boolean {
+  const rest = value.replace(/(?:please\s+)?refer to the following\b[^.]*(?:\.|$)/gi, "").trim();
+  return /refer to the following/i.test(value) && rest.length < 12;
+}
+
+function displayDetail(value: string): string {
+  return tidy(value.replace(/(?:please\s+)?refer to the following\b[^.]*(?:\.|$)/gi, " "));
 }
 
 function tidy(text: string): string {

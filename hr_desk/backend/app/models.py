@@ -12,6 +12,20 @@ class Employee:
     name: str
     designation: str
     is_admin: bool = False
+    employee_type: str | None = None
+    is_permanent: bool | None = None
+    medical_plan: str | None = None
+    joined_on: date | None = None
+
+    def __post_init__(self) -> None:
+        from .access import default_employee_type, default_is_permanent, default_medical_plan
+
+        if not self.employee_type:
+            object.__setattr__(self, "employee_type", default_employee_type(self.designation))
+        if self.is_permanent is None:
+            object.__setattr__(self, "is_permanent", default_is_permanent(self.designation))
+        if self.medical_plan is None:
+            object.__setattr__(self, "medical_plan", default_medical_plan(self.designation))
 
 
 @dataclass

@@ -156,9 +156,10 @@ def policy_overview(store, employee: Employee, today: date, topic: str) -> tuple
         return None
     lines = []
     for p in evidence[:6]:
-        heading = re.sub(r"\bannexures?\s+[a-z0-9]+\b\s*[:.-]?\s*", "", p.heading, flags=re.I).strip(" :")
-        body = re.sub(r"\bannexures?\s+[a-z0-9]+\b", "the policy", _clauses(p.body, 1), flags=re.I)
-        lines.append(f"- {heading}: {body}")
+        heading = _display_heading(p.heading)
+        body = _display_body(_clauses(p.body, 1))
+        if heading and body:
+            lines.append(f"- {heading}: {body}")
     return (f"{policy.title}, for your designation ({role_label(role)}):\n\n" + "\n".join(lines), evidence[:6])
 
 
@@ -211,6 +212,18 @@ def _plan_line(row: Passage) -> str:
     plan = next((value for label, value in fields if label.casefold() == "plan"), "Your plan")
     figures = "; ".join(f"{label} {value}" for label, value in fields if label.casefold() not in {"plan", "grades"})
     return f"{plan}: {figures}." if figures else f"{plan}."
+
+
+def _display_heading(heading: str) -> str:
+    text = re.sub(r"\bannexures?\s+[a-z0-9]+\b\s*[:.-]?\s*", "", heading or "", flags=re.I)
+    return re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", text).strip(" :.-")
+
+
+def _display_body(text: str) -> str:
+    cleaned = re.sub(r"\bannexures?\s+[a-z0-9]+\b", "the policy", text or "", flags=re.I)
+    cleaned = re.sub(r"(?i)(?:please\s+)?refer to the following\b[^.]*\.?", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .:")
+    return f"{cleaned}." if cleaned else ""
 
 
 def _clauses(text: str, count: int) -> str:

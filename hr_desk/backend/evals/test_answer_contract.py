@@ -255,6 +255,12 @@ class AnswerContractTests(unittest.TestCase):
         with self.assertLogs("hr_desk", level="ERROR"):
             self.assertIn("Verified employee designation: unknown", system_prompt(TODAY))
 
+    def test_answer_shape_rule_is_in_the_prompt(self):
+        prompt = system_prompt(TODAY, "General Manager")
+        self.assertIn("No heading and no bullets.", prompt)
+        self.assertIn('lines that each start with "- "', prompt)
+        self.assertIn("Do not copy this sample wording.", prompt)
+
     def test_topic_split_and_evidence_dedup(self):
         message = "travel policy, fuel allowance, health insurance, hotel allowance, travel expense form, DA for me"
         topics, overflow = split_topics(message)
@@ -468,7 +474,8 @@ class AnswerContractTests(unittest.TestCase):
             {"role": "user", "text": "Who approves business travel?"},
             {"role": "assistant", "text": "Contact the approver."},
         ])
-        self.assertEqual((new.search_query, new.background, new.note), ("the dress code", "", "topic-change"))
+        self.assertTrue(new.needs_model)
+        self.assertEqual(new.background, "Who approves business travel?")
 
     def test_claimed_designation_and_sensitive_questions_are_refused(self):
         pipeline = fixture_pipeline()
